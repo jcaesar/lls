@@ -25,22 +25,16 @@ fn main() -> Result<()> {
 
     let mut first_error = None;
     for p in all_processes()? {
-        match inspect_ps(p) {
+        match inspect_ps(p, &mut socks) {
             Ok(pd) => {
-                let mut listening = Vec::new();
-                for s in pd.sockets {
-                    if let Some(s) = socks.remove(&s) {
-                        listening.push(s);
-                    }
-                }
-                if listening.is_empty() {
+                if pd.sockets.is_empty() {
                     continue;
                 }
                 table.add_row([
                     Cell::new(pd.pid),
                     Cell::new(pd.name.unwrap_or_else(String::new)),
                     Cell::new(
-                        listening
+                        pd.sockets
                             .iter()
                             .map(|l| l.to_string())
                             .collect::<Vec<_>>()
@@ -256,16 +250,19 @@ type Pid = i32;
 struct ProcDesc {
     pid: Pid,
     name: Option<String>,
-    sockets: Vec<Ino>,
+    sockets: Vec<SocketInfo>,
 }
 
-fn inspect_ps(p: Result<Process, procfs::ProcError>) -> Result<ProcDesc> {
+fn inspect_ps(
+    p: Result<Process, procfs::ProcError>,
+    socks: &mut HashMap<Ino, SocketInfo>,
+) -> Result<ProcDesc> {
     let p = p?;
     let name = ps_name(&p);
     let sockets = p
         .fd()?
         .filter_map(|f| match f.ok()?.target {
-            procfs::process::FDTarget::Socket(s) => Some(s),
+            procfs::process::FDTarget::Socket(s) => socks.remove(&s),
             _ => None,
         })
         .collect();
