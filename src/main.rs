@@ -29,7 +29,7 @@ fn main() -> Result<()> {
             Ok(pd) => {
                 let mut listening = Vec::new();
                 for s in pd.sockets {
-                    if let Some(s) = socks.get(&s) {
+                    if let Some(s) = socks.remove(&s) {
                         listening.push(s);
                     }
                 }
@@ -71,7 +71,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 enum Family {
     V4,
     V6,
@@ -128,6 +128,7 @@ impl Display for Protocol {
     }
 }
 
+#[derive(Debug)]
 struct SocketInfo {
     family: Family,
     protocol: Protocol,
