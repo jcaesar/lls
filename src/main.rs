@@ -123,7 +123,7 @@ impl Display for Protocol {
 }
 
 #[derive(Debug)]
-struct SocketInfo {
+struct SockInfo {
     family: Family,
     protocol: Protocol,
     port: u16,
@@ -131,7 +131,7 @@ struct SocketInfo {
     uid: u32,
     ino: Ino,
 }
-impl SocketInfo {
+impl SockInfo {
     fn new(family: Family, protocol: Protocol, ir: InetResponse) -> Self {
         let family = ir
             .nlas
@@ -150,7 +150,7 @@ impl SocketInfo {
         }
     }
 }
-impl Display for SocketInfo {
+impl Display for SockInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.family {
             Family::V4 => f.write_fmt(format_args!(
@@ -172,7 +172,7 @@ impl Display for SocketInfo {
     }
 }
 
-fn all_sockets() -> Result<HashMap<Ino, SocketInfo>> {
+fn all_sockets() -> Result<HashMap<Ino, SockInfo>> {
     let mut ret = HashMap::new();
 
     let mut socket = Socket::new(NETLINK_SOCK_DIAG)?;
@@ -222,7 +222,7 @@ fn all_sockets() -> Result<HashMap<Ino, SocketInfo>> {
                             if response.header.socket_id.destination_port == 0 {
                                 ret.insert(
                                     response.header.inode.into(),
-                                    SocketInfo::new(family, protocol, *response),
+                                    SockInfo::new(family, protocol, *response),
                                 );
                             }
                         }
@@ -250,12 +250,12 @@ type Pid = i32;
 struct ProcDesc {
     pid: Pid,
     name: Option<String>,
-    sockets: Vec<SocketInfo>,
+    sockets: Vec<SockInfo>,
 }
 
 fn inspect_ps(
     p: Result<Process, procfs::ProcError>,
-    socks: &mut HashMap<Ino, SocketInfo>,
+    socks: &mut HashMap<Ino, SockInfo>,
 ) -> Result<ProcDesc> {
     let p = p?;
     let name = ps_name(&p);
