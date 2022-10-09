@@ -23,49 +23,35 @@ fn main() -> Result<()> {
         .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
         .set_header(["PID", "Process", "Listening"]);
 
-    let mut first_error = None;
-    for p in all_processes()? {
-        match inspect_ps(p, &mut socks) {
-            Ok(pd) => {
-                if pd.sockets.is_empty() {
-                    continue;
-                }
-                table.add_row([
-                    Cell::new(pd.pid),
-                    Cell::new(pd.name.unwrap_or_else(String::new)),
-                    Cell::new(
-                        pd.sockets
-                            .iter()
-                            .map(|l| l.to_string())
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                    ),
-                ]);
-            }
-            Err(e) => {
-                first_error.get_or_insert(e);
-            }
-        }
+    //    let mut first_error = None;
+    let mut lps = all_processes()?
+        .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks).ok())
+        .filter(|p| !p.sockets.is_empty())
+        .collect::<Vec<_>>();
+    lps.iter_mut().for_each(|p| p.sockets.sort());
+    lps.sort();
+    for pd in lps {
+        table.add_row([
+            Cell::new(pd.pid),
+            Cell::new(pd.name.unwrap_or_else(String::new)),
+            Cell::new(
+                pd.sockets
+                    .iter()
+                    .map(|l| l.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
+        ]);
+    }
+    for s in socks.values() {
+        table.add_row([Cell::new("???"), Cell::new("???"), Cell::new(s)]);
     }
     println!("{table}");
-
-    if !socks.is_empty() {
-        println!("The following sockets could not be accounted for. (Run as root?)");
-        let mut table = Table::new();
-        table
-            .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
-            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
-            .set_header(["Listening", "UID"]);
-        for i in socks.values() {
-            table.add_row([Cell::new(i), Cell::new(i.uid)]);
-        }
-        println!("{table}");
-    }
 
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Family {
     V4,
     V6,
@@ -97,7 +83,7 @@ impl Display for Family {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Protocol {
     TCP,
     UDP,
@@ -122,7 +108,7 @@ impl Display for Protocol {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct SockInfo {
     family: Family,
     protocol: Protocol,
@@ -169,6 +155,17 @@ impl Display for SockInfo {
                 self.addr, self.port, self.protocol,
             )),
         }
+    }
+}
+impl PartialOrd for SockInfo {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for SockInfo {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let key = |s: &SockInfo| (s.port, s.protocol, s.addr, s.family);
+        key(self).cmp(&key(other))
     }
 }
 
@@ -246,36 +243,49 @@ fn all_sockets() -> Result<HashMap<Ino, SockInfo>> {
 
 type Ino = u64;
 type Pid = i32;
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct ProcDesc {
     pid: Pid,
     name: Option<String>,
     sockets: Vec<SockInfo>,
 }
 
-fn inspect_ps(
-    p: Result<Process, procfs::ProcError>,
-    socks: &mut HashMap<Ino, SockInfo>,
-) -> Result<ProcDesc> {
-    let p = p?;
-    let name = ps_name(&p);
-    let sockets = p
-        .fd()?
-        .filter_map(|f| match f.ok()?.target {
-            procfs::process::FDTarget::Socket(s) => socks.remove(&s),
-            _ => None,
+impl ProcDesc {
+    fn inspect_ps(
+        p: Result<Process, procfs::ProcError>,
+        socks: &mut HashMap<Ino, SockInfo>,
+    ) -> Result<ProcDesc> {
+        let p = p?;
+        let name = ProcDesc::ps_name(&p);
+        let sockets = p
+            .fd()?
+            .filter_map(|f| match f.ok()?.target {
+                procfs::process::FDTarget::Socket(s) => socks.remove(&s),
+                _ => None,
+            })
+            .collect();
+        Ok(ProcDesc {
+            pid: p.pid,
+            name,
+            sockets,
         })
-        .collect();
-    Ok(ProcDesc {
-        pid: p.pid,
-        name,
-        sockets,
-    })
+    }
+
+    fn ps_name(p: &Process) -> Option<String> {
+        p.cmdline()
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .or(p.exe().ok().map(|p| p.to_string_lossy().into_owned()))
+    }
 }
 
-fn ps_name(p: &Process) -> Option<String> {
-    p.cmdline()
-        .ok()
-        .and_then(|v| v.into_iter().next())
-        .or(p.exe().ok().map(|p| p.to_string_lossy().into_owned()))
+impl PartialOrd for ProcDesc {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for ProcDesc {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (&self.sockets, self.pid, &self.name).cmp(&(&other.sockets, other.pid, &other.name))
+    }
 }
