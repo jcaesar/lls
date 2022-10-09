@@ -5,7 +5,11 @@ use std::{
 };
 
 use anyhow::Result;
-use comfy_table::{Cell, Table};
+use comfy_table::{
+    Cell,
+    CellAlignment::{Left, Right},
+    Table,
+};
 use netlink_packet_sock_diag::{
     constants::*,
     inet::{nlas::Nla, ExtensionFlags, InetRequest, InetResponse, SocketId, StateFlags},
@@ -18,12 +22,21 @@ fn main() -> Result<()> {
     let mut socks = all_sockets()?;
 
     let mut table = Table::new();
+    let lcell = |t| Cell::new(t).set_alignment(Left);
     table
         .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
         .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
-        .set_header(["PID", "Process", "Port", "Addr", ""]);
+        .set_header([
+            lcell("PID"),
+            lcell("Process"),
+            lcell("Port"),
+            lcell("Addr"),
+            lcell(""),
+        ]);
+    for col in [0, 2, 3] {
+        table.column_mut(col).unwrap().set_cell_alignment(Right);
+    }
 
-    //    let mut first_error = None;
     let mut lps = all_processes()?
         .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks).ok())
         .filter(|p| !p.sockets.is_empty())
