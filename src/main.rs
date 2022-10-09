@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     table
         .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
         .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
-        .set_header(["PID", "Process", "Listening"]);
+        .set_header(["PID", "Process", "Port", "Addr", ""]);
 
     //    let mut first_error = None;
     let mut lps = all_processes()?
@@ -31,20 +31,24 @@ fn main() -> Result<()> {
     lps.iter_mut().for_each(|p| p.sockets.sort());
     lps.sort();
     for pd in lps {
-        table.add_row([
-            Cell::new(pd.pid),
-            Cell::new(pd.name.unwrap_or_else(String::new)),
-            Cell::new(
-                pd.sockets
-                    .iter()
-                    .map(|l| l.to_string())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            ),
-        ]);
+        for (i, l) in pd.sockets.iter().enumerate() {
+            table.add_row([
+                Cell::new(pd.pid),
+                Cell::new(pd.name.as_deref().unwrap_or("")),
+                Cell::new(l.port),
+                Cell::new(l.addr),
+                Cell::new(l.protocol),
+            ]);
+        }
     }
     for s in socks.values() {
-        table.add_row([Cell::new("???"), Cell::new("???"), Cell::new(s)]);
+        table.add_row([
+            Cell::new("???"),
+            Cell::new("???"),
+            Cell::new(s.port),
+            Cell::new(s.addr),
+            Cell::new(s.protocol),
+        ]);
     }
     println!("{table}");
 
