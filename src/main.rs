@@ -27,8 +27,8 @@ fn main() -> Result<()> {
         .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
         .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
         .set_header([
-            lcell("PID"),
             lcell("User"),
+            lcell("PID"),
             lcell("Process"),
             lcell("Port"),
             lcell("Addr"),
@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     socks.sort_by_cached_key(|t| t.1.clone());
     for (_, socks) in socks {
         for (i, s) in socks.iter().enumerate() {
-            add_row(&mut table, None, s, i == 0);
+            add_row(&mut table, None, s, true);
         }
     }
     println!("{table}");
@@ -72,12 +72,12 @@ fn add_row(table: &mut Table, pd: Option<&ProcDesc>, l: &SockInfo, print_proc_in
         false => Cell::new(""),
     };
     table.add_row([
+        proc_info_filter(l.uid.to_string().as_str()),
         proc_info_filter(
             pd.map_or("???".to_string(), |pd| pd.pid.to_string())
                 .as_str(),
         ),
-        proc_info_filter(l.uid.to_string().as_str()),
-        proc_info_filter(pd.and_then(|pd| pd.name.as_deref()).unwrap_or("???")),
+        proc_info_filter(pd.and_then(|pd| pd.name.as_deref()).unwrap_or("")),
         Cell::new(l.port),
         Cell::new(l.addr),
         Cell::new(l.protocol),
