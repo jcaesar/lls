@@ -1,15 +1,10 @@
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    net::{IpAddr, Ipv6Addr},
-};
-
 use anyhow::Result;
 use comfy_table::{
     Cell,
     CellAlignment::{Left, Right},
     Table,
 };
+use itertools::Itertools;
 use netlink_packet_sock_diag::{
     constants::*,
     inet::{nlas::Nla, ExtensionFlags, InetRequest, InetResponse, SocketId, StateFlags},
@@ -17,6 +12,11 @@ use netlink_packet_sock_diag::{
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use procfs::process::{all_processes, Process};
+use std::{
+    collections::HashMap,
+    fmt::Display,
+    net::{IpAddr, Ipv6Addr},
+};
 
 fn main() -> Result<()> {
     let mut socks = all_sockets()?;
@@ -56,15 +56,24 @@ fn main() -> Result<()> {
             ]);
         }
     }
-    for s in socks.values() {
-        table.add_row([
-            Cell::new("???"),
-            Cell::new(s.uid),
-            Cell::new("???"),
-            Cell::new(s.port),
-            Cell::new(s.addr),
-            Cell::new(s.protocol),
-        ]);
+    let mut socks = socks
+        .values()
+        .into_group_map_by(|s| s.uid)
+        .into_iter()
+        .collect::<Vec<_>>();
+    socks.iter_mut().for_each(|(_, x)| x.sort());
+    socks.sort_by_cached_key(|t| t.1.clone());
+    for (uid, socks) in socks {
+        for s in socks {
+            table.add_row([
+                Cell::new("???"),
+                Cell::new(uid),
+                Cell::new("???"),
+                Cell::new(s.port),
+                Cell::new(s.addr),
+                Cell::new(s.protocol),
+            ]);
+        }
     }
     println!("{table}");
 
