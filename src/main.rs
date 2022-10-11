@@ -294,10 +294,12 @@ impl ProcDesc {
     }
 
     fn ps_name(p: &Process) -> Option<String> {
-        p.cmdline()
+        p.exe()
             .ok()
-            .and_then(|v| v.into_iter().next())
-            .or(p.exe().ok().map(|p| p.to_string_lossy().into_owned()))
+            // I considered checking whether to check if the exe file_name is on $PATH
+            // and print the whole path if not. Nah.
+            .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
+            .or(p.cmdline().ok().and_then(|v| v.into_iter().next()))
     }
 }
 
