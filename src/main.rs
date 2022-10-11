@@ -12,11 +12,7 @@ use netlink_packet_sock_diag::{
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use procfs::process::{all_processes, Process};
-use std::{
-    collections::HashMap,
-    fmt::Display,
-    net::{IpAddr, Ipv6Addr},
-};
+use std::{collections::HashMap, fmt::Display, net::IpAddr};
 
 fn main() -> Result<()> {
     let mut socks = all_sockets()?;
@@ -57,7 +53,7 @@ fn main() -> Result<()> {
     socks.iter_mut().for_each(|(_, x)| x.sort());
     socks.sort_by_cached_key(|t| t.1.clone());
     for (_, socks) in socks {
-        for (i, s) in socks.iter().enumerate() {
+        for s in socks {
             add_row(&mut table, None, s, true);
         }
     }
@@ -166,27 +162,6 @@ impl SockInfo {
             addr: ir.header.socket_id.source_address,
             uid: ir.header.uid,
             ino: ir.header.inode.into(),
-        }
-    }
-}
-impl Display for SockInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self.family {
-            Family::V4 => f.write_fmt(format_args!(
-                "{:?}:{} ({})",
-                self.addr, self.port, self.protocol,
-            )),
-            Family::V6 => f.write_fmt(format_args!(
-                "[{:?}]:{} ({})",
-                self.addr, self.port, self.protocol,
-            )),
-            Family::Both if self.addr == IpAddr::V6(Ipv6Addr::UNSPECIFIED) => {
-                f.write_fmt(format_args!("*:{} ({})", self.port, self.protocol))
-            }
-            Family::Both => f.write_fmt(format_args!(
-                "[{:?} + v4]:{} ({})",
-                self.addr, self.port, self.protocol,
-            )),
         }
     }
 }
