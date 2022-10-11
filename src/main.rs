@@ -12,12 +12,14 @@ use netlink_packet_sock_diag::{
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use procfs::process::{all_processes, Process};
-use std::{collections::HashMap, fmt::Display, net::IpAddr};
+use std::{collections::HashMap, fmt::Display, net::IpAddr, path::PathBuf};
+use users::{Users, UsersCache};
 
 fn main() -> Result<()> {
-    let mut socks = all_sockets()?;
-
     let mut table = Table::new();
+
+    let users_cache = UsersCache::new();
+    let mut socks = all_sockets()?;
     let lcell = |t| Cell::new(t).set_alignment(Left);
     table
         .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
@@ -30,12 +32,12 @@ fn main() -> Result<()> {
             lcell("Addr"),
             lcell(""),
         ]);
-    for col in [0, 1, 3, 4] {
+    for col in [1, 3, 4] {
         table.column_mut(col).unwrap().set_cell_alignment(Right);
     }
 
     let mut lps = all_processes()?
-        .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks).ok())
+        .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks, &users_cache).ok())
         .filter(|p| !p.sockets.is_empty())
         .collect::<Vec<_>>();
     lps.iter_mut().for_each(|p| p.sockets.sort());
@@ -68,7 +70,10 @@ fn add_row(table: &mut Table, pd: Option<&ProcDesc>, l: &SockInfo, print_proc_in
         false => Cell::new(""),
     };
     table.add_row([
-        proc_info_filter(l.uid.to_string().as_str()),
+        proc_info_filter(
+            pd.map_or_else(|| l.uid.to_string(), |pd| pd.user.clone())
+                .as_str(),
+        ),
         proc_info_filter(
             pd.map_or("???".to_string(), |pd| pd.pid.to_string())
                 .as_str(),
@@ -254,6 +259,7 @@ type Pid = i32;
 #[derive(Debug, PartialEq, Eq)]
 struct ProcDesc {
     pid: Pid,
+    user: String,
     name: Option<String>,
     sockets: Vec<SockInfo>,
 }
@@ -262,9 +268,16 @@ impl ProcDesc {
     fn inspect_ps(
         p: Result<Process, procfs::ProcError>,
         socks: &mut HashMap<Ino, SockInfo>,
+        user_names: &UsersCache,
     ) -> Result<ProcDesc> {
         let p = p?;
         let name = ProcDesc::ps_name(&p);
+        let user = match p.root().ok().filter(|p| p == &PathBuf::from("/")).is_some() {
+            true => user_names
+                .get_user_by_uid(p.uid()?)
+                .map_or_else(String::new, |u| u.name().to_string_lossy().into_owned()),
+            false => String::new(),
+        };
         let sockets = p
             .fd()?
             .filter_map(|f| match f.ok()?.target {
@@ -276,6 +289,7 @@ impl ProcDesc {
             pid: p.pid,
             name,
             sockets,
+            user,
         })
     }
 
