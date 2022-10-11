@@ -28,12 +28,13 @@ fn main() -> Result<()> {
         .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
         .set_header([
             lcell("PID"),
+            lcell("User"),
             lcell("Process"),
             lcell("Port"),
             lcell("Addr"),
             lcell(""),
         ]);
-    for col in [0, 2, 3] {
+    for col in [0, 1, 3, 4] {
         table.column_mut(col).unwrap().set_cell_alignment(Right);
     }
 
@@ -47,6 +48,7 @@ fn main() -> Result<()> {
         for (i, l) in pd.sockets.iter().enumerate() {
             table.add_row([
                 Cell::new(pd.pid),
+                Cell::new(l.uid),
                 Cell::new(pd.name.as_deref().unwrap_or("")),
                 Cell::new(l.port),
                 Cell::new(l.addr),
@@ -57,6 +59,7 @@ fn main() -> Result<()> {
     for s in socks.values() {
         table.add_row([
             Cell::new("???"),
+            Cell::new(s.uid),
             Cell::new("???"),
             Cell::new(s.port),
             Cell::new(s.addr),
