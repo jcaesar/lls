@@ -46,14 +46,7 @@ fn main() -> Result<()> {
     lps.sort();
     for pd in lps {
         for (i, l) in pd.sockets.iter().enumerate() {
-            table.add_row([
-                Cell::new(pd.pid),
-                Cell::new(l.uid),
-                Cell::new(pd.name.as_deref().unwrap_or("")),
-                Cell::new(l.port),
-                Cell::new(l.addr),
-                Cell::new(l.protocol),
-            ]);
+            add_row(&mut table, Some(&pd), l, i == 0);
         }
     }
     let mut socks = socks
@@ -63,21 +56,32 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>();
     socks.iter_mut().for_each(|(_, x)| x.sort());
     socks.sort_by_cached_key(|t| t.1.clone());
-    for (uid, socks) in socks {
-        for s in socks {
-            table.add_row([
-                Cell::new("???"),
-                Cell::new(uid),
-                Cell::new("???"),
-                Cell::new(s.port),
-                Cell::new(s.addr),
-                Cell::new(s.protocol),
-            ]);
+    for (_, socks) in socks {
+        for (i, s) in socks.iter().enumerate() {
+            add_row(&mut table, None, s, i == 0);
         }
     }
     println!("{table}");
 
     Ok(())
+}
+
+fn add_row(table: &mut Table, pd: Option<&ProcDesc>, l: &SockInfo, print_proc_info: bool) {
+    let proc_info_filter = |v| match print_proc_info {
+        true => Cell::new(v),
+        false => Cell::new(""),
+    };
+    table.add_row([
+        proc_info_filter(
+            pd.map_or("???".to_string(), |pd| pd.pid.to_string())
+                .as_str(),
+        ),
+        proc_info_filter(l.uid.to_string().as_str()),
+        proc_info_filter(pd.and_then(|pd| pd.name.as_deref()).unwrap_or("???")),
+        Cell::new(l.port),
+        Cell::new(l.addr),
+        Cell::new(l.protocol),
+    ]);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
