@@ -72,14 +72,41 @@ fn render_entry(
     } else {
         out.push_str(&tree.data);
     }
+    let collapsed = collapse(&tree.children.0, mw.map(|mw| mw - out.width()));
+    if let Some(collapsed) = &collapsed {
+        out.push_str(collapsed);
+    }
     ret(&out);
-    for child in tree.children.0.iter().with_position() {
-        let last = matches!(
-            child,
-            itertools::Position::Last(_) | itertools::Position::Only(_)
-        );
-        let child = child.into_inner();
-        let prefix = Prefix { last, prefix };
-        render_entry(child, mw, ret, Some(&prefix));
+    if collapsed.is_none() {
+        for child in tree.children.0.iter().with_position() {
+            let last = matches!(
+                child,
+                itertools::Position::Last(_) | itertools::Position::Only(_)
+            );
+            let child = child.into_inner();
+            let prefix = Prefix { last, prefix };
+            render_entry(child, mw, ret, Some(&prefix));
+        }
+    }
+}
+
+fn collapse(children: &[Entry], mw: Option<usize>) -> Option<String> {
+    match &children {
+        &[Entry { data, children }] => {
+            let nw = data.width() + " / ".width();
+            if mw.map_or_else(|| true, |mw| nw <= mw) {
+                if children.0.is_empty() {
+                    Some(format!(" / {data}"))
+                } else {
+                    Some(format!(
+                        " / {data}{}",
+                        collapse(&children.0, mw.map(|mw| mw.saturating_sub(nw)))?
+                    ))
+                }
+            } else {
+                None
+            }
+        }
+        _ => None,
     }
 }
