@@ -132,7 +132,13 @@ impl Protocol {
 }
 impl Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{:?}", self))
+        match self {
+            Protocol::TCP => f.write_str("tcp"),
+            Protocol::UDP => f.write_str("udp"),
+            Protocol::UDPlite => f.write_str("udplite"),
+            Protocol::RAW => f.write_str("raw"),
+            Protocol::SCTP => f.write_str("sctp"),
+        }
     }
 }
 
