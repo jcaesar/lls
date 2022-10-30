@@ -1,9 +1,6 @@
+mod termtree;
+
 use anyhow::Result;
-use comfy_table::{
-    Cell,
-    CellAlignment::{Left, Right},
-    Table,
-};
 use itertools::Itertools;
 use netlink_packet_sock_diag::{
     constants::*,
@@ -12,29 +9,19 @@ use netlink_packet_sock_diag::{
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use procfs::process::{all_processes, Process};
-use std::{collections::HashMap, fmt::Display, net::IpAddr, path::PathBuf};
+use std::{
+    collections::{BTreeMap, HashMap},
+    fmt::Display,
+    net::IpAddr,
+    ops::Deref,
+    path::PathBuf,
+};
 use users::{Users, UsersCache};
 
 fn main() -> Result<()> {
-    let mut table = Table::new();
-
     let users_cache = UsersCache::new();
     let mut socks = all_sockets()?;
-    let lcell = |t| Cell::new(t).set_alignment(Left);
-    table
-        .load_preset(comfy_table::presets::UTF8_BORDERS_ONLY)
-        .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
-        .set_header([
-            lcell("User"),
-            lcell("PID"),
-            lcell("Process"),
-            lcell("Port"),
-            lcell("Addr"),
-            lcell(""),
-        ]);
-    for col in [1, 3, 4] {
-        table.column_mut(col).unwrap().set_cell_alignment(Right);
-    }
+    let mut output = termtree::Tree::new();
 
     let mut lps = all_processes()?
         .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks, &users_cache).ok())
@@ -43,9 +30,15 @@ fn main() -> Result<()> {
     lps.iter_mut().for_each(|p| p.sockets.sort());
     lps.sort();
     for pd in lps {
-        for (i, l) in pd.sockets.iter().enumerate() {
-            add_row(&mut table, Some(&pd), l, i == 0);
-        }
+        output.node(
+            format!(
+                "{} / {} / {}",
+                pd.pid,
+                pd.user,
+                pd.name.as_deref().unwrap_or("???")
+            ),
+            sockets_tree(&pd.sockets),
+        );
     }
     let mut socks = socks
         .values()
@@ -54,35 +47,36 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>();
     socks.iter_mut().for_each(|(_, x)| x.sort());
     socks.sort_by_cached_key(|t| t.1.clone());
-    for (_, socks) in socks {
-        for s in socks {
-            add_row(&mut table, None, s, true);
-        }
+    for (uid, socks) in socks {
+        output.node(format!("??? / {uid} / ???",), sockets_tree(socks));
     }
-    println!("{table}");
+    output.render(
+        terminal_size::terminal_size().map(|(terminal_size::Width(w), _)| w.into()),
+        &mut |s| println!("{s}"),
+    );
 
     Ok(())
 }
 
-fn add_row(table: &mut Table, pd: Option<&ProcDesc>, l: &SockInfo, print_proc_info: bool) {
-    let proc_info_filter = |v| match print_proc_info {
-        true => Cell::new(v),
-        false => Cell::new(""),
-    };
-    table.add_row([
-        proc_info_filter(
-            pd.map_or_else(|| l.uid.to_string(), |pd| pd.user.clone())
-                .as_str(),
-        ),
-        proc_info_filter(
-            pd.map_or("???".to_string(), |pd| pd.pid.to_string())
-                .as_str(),
-        ),
-        proc_info_filter(pd.and_then(|pd| pd.name.as_deref()).unwrap_or("")),
-        Cell::new(l.port),
-        Cell::new(l.addr),
-        Cell::new(l.protocol),
-    ]);
+fn sockets_tree(
+    sockets: impl IntoIterator<Item = impl Deref<Target = SockInfo>>,
+) -> termtree::Tree {
+    let mut pout = termtree::Tree::new();
+    let mut groups = BTreeMap::<_, Vec<_>>::new();
+    for s in sockets {
+        groups.entry((s.port, s.protocol)).or_default().push(s);
+    }
+    for ((port, proto), socks) in groups {
+        let mut sout = termtree::Tree::new();
+        for sock in socks {
+            match sock.family {
+                Family::Both => sout.leaf("*".into()),
+                _ => sout.leaf(format!("{}", sock.addr)),
+            };
+        }
+        pout.node(format!("{port}/{proto}"), sout);
+    }
+    pout
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
