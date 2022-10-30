@@ -12,7 +12,7 @@ use procfs::process::{all_processes, Process};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
-    net::IpAddr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
     path::PathBuf,
 };
@@ -68,11 +68,18 @@ fn sockets_tree(
     }
     for ((port, proto), socks) in groups {
         let mut sout = termtree::Tree::new();
-        for sock in socks {
-            match sock.family {
-                Family::Both => sout.leaf("*".into()),
-                _ => sout.leaf(format!("{}", sock.addr)),
-            };
+        if socks.len() == 2
+            && socks.iter().any(|s| s.addr == Ipv4Addr::UNSPECIFIED)
+            && socks.iter().any(|s| s.addr == Ipv6Addr::UNSPECIFIED)
+        {
+            sout.leaf("0.0.0.0 + ::".into());
+        } else {
+            for sock in socks {
+                match sock.family {
+                    Family::Both => sout.leaf("*".into()),
+                    _ => sout.leaf(format!("{}", sock.addr)),
+                };
+            }
         }
         pout.node(format!("{port}/{proto}"), sout);
     }
