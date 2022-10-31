@@ -83,7 +83,7 @@ fn sockets_tree(
                 };
             }
         }
-        pout.node(format!("{port}/{proto}"), sout);
+        pout.node(format!(":{port} {proto}"), sout);
     }
     pout
 }
