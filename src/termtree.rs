@@ -1,6 +1,8 @@
 use itertools::Itertools;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+const GREY: ansi_term::Colour = ansi_term::Colour::Fixed(244);
+
 pub struct Tree(Vec<Entry>);
 pub struct Entry {
     pub data: String,
@@ -22,7 +24,7 @@ impl Tree {
         Self(vec![])
     }
 
-    pub fn render(&self, mw: Option<usize>, ret: &mut impl FnMut(&str)) {
+    pub fn render(&self, mw: Option<usize>, ret: &mut impl FnMut(&[u8])) {
         for entry in &self.0 {
             render_entry(entry, mw, ret, None);
         }
@@ -49,11 +51,17 @@ fn render_pfx(prefix: Option<&Prefix>, rightmost: bool, ret: &mut impl FnMut(&st
 fn render_entry(
     tree: &Entry,
     mw: Option<usize>,
-    ret: &mut impl FnMut(&str),
+    ret: &mut impl FnMut(&[u8]),
     prefix: Option<&Prefix<'_>>,
 ) {
+    if mw.is_some() {
+        let mut out = String::new();
+        render_pfx(prefix, true, &mut |s| out.push_str(s));
+        ret(format!("{}", GREY.paint(out)).as_bytes());
+    } else {
+        render_pfx(prefix, true, &mut |s| ret(s.as_bytes()));
+    }
     let mut out = String::new();
-    render_pfx(prefix, true, &mut |s| out.push_str(s));
     if let Some(mw) = mw {
         if out.width() + tree.data.width() <= mw {
             out.push_str(&tree.data);
@@ -76,7 +84,8 @@ fn render_entry(
     if let Some(collapsed) = &collapsed {
         out.push_str(collapsed);
     }
-    ret(&out);
+    ret(out.as_bytes());
+    ret(b"\n");
     if collapsed.is_none() {
         for child in tree.children.0.iter().with_position() {
             let last = matches!(
@@ -91,15 +100,20 @@ fn render_entry(
 }
 
 fn collapse(children: &[Entry], mw: Option<usize>) -> Option<String> {
+    let sep = if mw.is_some() {
+        format!("{}", GREY.paint(" / "))
+    } else {
+        " / ".into()
+    };
     match &children {
         &[Entry { data, children }] => {
-            let nw = data.width() + " / ".width();
+            let nw = data.width() + sep.width();
             if mw.map_or_else(|| true, |mw| nw <= mw) {
                 if children.0.is_empty() {
-                    Some(format!(" / {data}"))
+                    Some(format!("{sep}{data}"))
                 } else {
                     Some(format!(
-                        " / {data}{}",
+                        "{sep}{data}{}",
                         collapse(&children.0, mw.map(|mw| mw.saturating_sub(nw)))?
                     ))
                 }

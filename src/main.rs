@@ -12,6 +12,7 @@ use procfs::process::{all_processes, Process};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::Display,
+    io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
     path::PathBuf,
@@ -50,9 +51,10 @@ fn main() -> Result<()> {
     for (uid, socks) in socks {
         output.node(format!("??? / {uid} / ???",), sockets_tree(socks));
     }
+    let stdout = &mut BufWriter::new(stdout());
     output.render(
         terminal_size::terminal_size().map(|(terminal_size::Width(w), _)| w.into()),
-        &mut |s| println!("{s}"),
+        &mut |s| stdout.write_all(s).expect("stdout shut"),
     );
 
     Ok(())
