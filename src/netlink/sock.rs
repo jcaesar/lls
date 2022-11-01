@@ -1,12 +1,18 @@
-use crate::{netlink::drive_req, *};
+use super::{drive_req, route::Rtbl};
+use crate::Ino;
+use anyhow::Result;
 use netlink_packet_sock_diag::{
     constants::*,
     inet::{nlas::Nla, ExtensionFlags, InetRequest, InetResponse, SocketId, StateFlags},
-    NetlinkHeader, NetlinkMessage, NetlinkPayload, SockDiagMessage,
+    NetlinkHeader, NetlinkMessage, SockDiagMessage,
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
+use std::{collections::HashMap, fmt::Display, net::IpAddr};
 
-pub fn all_sockets(interfaces: &HashMap<u32, String>) -> Result<HashMap<Ino, SockInfo>> {
+pub fn all_sockets(
+    interfaces: &HashMap<u32, String>,
+    local_routes: Rtbl,
+) -> Result<HashMap<Ino, SockInfo>> {
     let mut socket = Socket::new(NETLINK_SOCK_DIAG)?;
     socket.bind_auto()?;
     socket.connect(&SocketAddr::new(0, 0))?;
@@ -43,7 +49,7 @@ pub fn all_sockets(interfaces: &HashMap<u32, String>) -> Result<HashMap<Ino, Soc
                     if response.header.socket_id.destination_port == 0 {
                         ret.insert(
                             response.header.inode.into(),
-                            SockInfo::new(family, protocol, *response, interfaces),
+                            SockInfo::new(family, protocol, *response, interfaces, &local_routes),
                         );
                     }
                 }
@@ -133,6 +139,7 @@ impl<'a> SockInfo<'a> {
         protocol: Protocol,
         ir: InetResponse,
         interfaces: &'a HashMap<u32, String>,
+        local_routes: &Rtbl,
     ) -> Self {
         let family = ir
             .nlas
@@ -141,16 +148,23 @@ impl<'a> SockInfo<'a> {
             .is_some()
             .then_some(Family::Both)
             .unwrap_or(family);
+        let addr = ir.header.socket_id.source_address;
+        let iface = interfaces
+            .get(&ir.header.socket_id.interface_id)
+            .or_else(|| {
+                local_routes
+                    .route(addr)
+                    .and_then(|iface| interfaces.get(&iface))
+            })
+            .map(|x| &**x);
         Self {
             family,
             protocol,
             port: ir.header.socket_id.source_port,
-            addr: ir.header.socket_id.source_address,
+            addr,
             uid: ir.header.uid,
             ino: ir.header.inode.into(),
-            iface: interfaces
-                .get(&ir.header.socket_id.interface_id)
-                .map(|x| &**x),
+            iface,
         }
     }
 }

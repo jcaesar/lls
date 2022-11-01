@@ -3,13 +3,15 @@ mod termtree;
 
 use anyhow::Result;
 use itertools::Itertools;
-use netlink::sock::{Family, SockInfo};
+use netlink::{
+    route::Rtbl,
+    sock::{Family, SockInfo},
+};
 use procfs::process::{all_processes, Process};
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt::Display,
     io::{stdout, BufWriter, Write},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::{Ipv4Addr, Ipv6Addr},
     ops::Deref,
     path::PathBuf,
 };
@@ -17,8 +19,10 @@ use users::{Users, UsersCache};
 
 fn main() -> Result<()> {
     let users_cache = UsersCache::new();
-    let interfaces = netlink::route::interface_names().unwrap_or_default();
-    let mut socks = netlink::sock::all_sockets(&interfaces)?;
+    let route_socket = &netlink::route::socket();
+    let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
+    let local_routes = netlink::route::local_routes(route_socket).unwrap_or(Rtbl::empty());
+    let mut socks = netlink::sock::all_sockets(&interfaces, local_routes)?;
     let mut output = termtree::Tree::new();
 
     let mut lps = all_processes()?
