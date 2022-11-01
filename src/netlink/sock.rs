@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{netlink::drive_req, *};
 use netlink_packet_sock_diag::{
     constants::*,
     inet::{nlas::Nla, ExtensionFlags, InetRequest, InetResponse, SocketId, StateFlags},
@@ -24,7 +24,7 @@ pub fn all_sockets(interfaces: &HashMap<u32, String>) -> Result<HashMap<Ino, Soc
 
     for family in families {
         for protocol in protocols {
-            let mut packet = NetlinkMessage {
+            let packet = NetlinkMessage {
                 header: NetlinkHeader {
                     flags: NLM_F_REQUEST | NLM_F_DUMP,
                     ..Default::default()
@@ -38,42 +38,17 @@ pub fn all_sockets(interfaces: &HashMap<u32, String>) -> Result<HashMap<Ino, Soc
                 })
                 .into(),
             };
-            packet.finalize();
-            let mut buf = vec![0; packet.header.length as usize];
-            assert_eq!(buf.len(), packet.buffer_len());
-            packet.serialize(&mut buf[..]);
-            socket.send(&buf[..], 0)?;
-            let mut receive_buffer = vec![0; 4096];
-            let mut offset = 0;
-
-            'recv: while let Ok(size) = socket.recv(&mut &mut receive_buffer[..], 0) {
-                loop {
-                    let bytes = &receive_buffer[offset..];
-                    let rx_packet = <NetlinkMessage<SockDiagMessage>>::deserialize(bytes).unwrap();
-
-                    match rx_packet.payload {
-                        NetlinkPayload::Noop | NetlinkPayload::Ack(_) => {}
-                        NetlinkPayload::InnerMessage(SockDiagMessage::InetResponse(response)) => {
-                            if response.header.socket_id.destination_port == 0 {
-                                ret.insert(
-                                    response.header.inode.into(),
-                                    SockInfo::new(family, protocol, *response, interfaces),
-                                );
-                            }
-                        }
-                        NetlinkPayload::Done
-                        | NetlinkPayload::Error(_)
-                        | NetlinkPayload::Overrun(_)
-                        | _ => break 'recv,
-                    }
-
-                    offset += rx_packet.header.length as usize;
-                    if offset == size || rx_packet.header.length == 0 {
-                        offset = 0;
-                        break;
+            drive_req(packet, &socket, |inner| match inner {
+                SockDiagMessage::InetResponse(response) => {
+                    if response.header.socket_id.destination_port == 0 {
+                        ret.insert(
+                            response.header.inode.into(),
+                            SockInfo::new(family, protocol, *response, interfaces),
+                        );
                     }
                 }
-            }
+                _ => unreachable!("We made an InetRequest, we get an InetResponse, yeah?"),
+            })?;
         }
     }
     Ok(ret)
