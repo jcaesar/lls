@@ -1,4 +1,5 @@
 mod netlink;
+mod procs;
 mod termtree;
 
 use anyhow::Result;
@@ -7,15 +8,16 @@ use netlink::{
     route::Rtbl,
     sock::{Family, SockInfo},
 };
-use procfs::process::{all_processes, Process};
+use procfs::process::all_processes;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     io::{stdout, BufWriter, Write},
     net::{Ipv4Addr, Ipv6Addr},
     ops::Deref,
-    path::PathBuf,
 };
-use users::{Users, UsersCache};
+use users::UsersCache;
+
+pub type Ino = u64;
 
 fn main() -> Result<()> {
     let users_cache = UsersCache::new();
@@ -26,7 +28,7 @@ fn main() -> Result<()> {
     let mut output = termtree::Tree::new();
 
     let mut lps = all_processes()?
-        .filter_map(|p| ProcDesc::inspect_ps(p, &mut socks, &users_cache).ok())
+        .filter_map(|p| procs::ProcDesc::inspect_ps(p, &mut socks, &users_cache).ok())
         .filter(|p| !p.sockets.is_empty())
         .collect::<Vec<_>>();
     lps.iter_mut().for_each(|p| p.sockets.sort());
@@ -88,64 +90,4 @@ fn sockets_tree<'a>(
         pout.node(format!(":{port} {proto}"), sout);
     }
     pout
-}
-
-type Ino = u64;
-type Pid = i32;
-#[derive(Debug, PartialEq, Eq)]
-struct ProcDesc<'a> {
-    pid: Pid,
-    user: String,
-    name: Option<String>,
-    sockets: Vec<SockInfo<'a>>,
-}
-
-impl<'a> ProcDesc<'a> {
-    fn inspect_ps(
-        p: Result<Process, procfs::ProcError>,
-        socks: &mut HashMap<Ino, SockInfo<'a>>,
-        user_names: &UsersCache,
-    ) -> Result<ProcDesc<'a>> {
-        let p = p?;
-        let name = ProcDesc::ps_name(&p);
-        let user = match p.root().ok().filter(|p| p == &PathBuf::from("/")).is_some() {
-            true => user_names
-                .get_user_by_uid(p.uid()?)
-                .map_or_else(String::new, |u| u.name().to_string_lossy().into_owned()),
-            false => String::new(),
-        };
-        let sockets = p
-            .fd()?
-            .filter_map(|f| match f.ok()?.target {
-                procfs::process::FDTarget::Socket(s) => socks.remove(&s),
-                _ => None,
-            })
-            .collect();
-        Ok(ProcDesc {
-            pid: p.pid,
-            name,
-            sockets,
-            user,
-        })
-    }
-
-    fn ps_name(p: &Process) -> Option<String> {
-        p.exe()
-            .ok()
-            // I considered checking whether to check if the exe file_name is on $PATH
-            // and print the whole path if not. Nah.
-            .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
-            .or(p.cmdline().ok().and_then(|v| v.into_iter().next()))
-    }
-}
-
-impl PartialOrd for ProcDesc<'_> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for ProcDesc<'_> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        (&self.sockets, self.pid, &self.name).cmp(&(&other.sockets, other.pid, &other.name))
-    }
 }
