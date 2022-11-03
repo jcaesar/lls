@@ -12,7 +12,7 @@ use procfs::process::all_processes;
 use std::{
     collections::BTreeMap,
     io::{stdout, BufWriter, Write},
-    net::{Ipv4Addr, Ipv6Addr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
 };
 use users::UsersCache;
@@ -73,9 +73,11 @@ fn sockets_tree<'a>(
     }
     for ((port, proto), socks) in groups {
         let mut sout = termtree::Tree::new();
-        if socks.len() == 2
-            && socks.iter().any(|s| s.addr == Ipv4Addr::UNSPECIFIED)
-            && socks.iter().any(|s| s.addr == Ipv6Addr::UNSPECIFIED)
+        if socks.iter().map(|s| s.addr).sorted().collect::<Vec<_>>()
+            == [
+                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                IpAddr::V6(Ipv6Addr::UNSPECIFIED),
+            ]
         {
             sout.leaf("0.0.0.0 + ::".into());
         } else {
