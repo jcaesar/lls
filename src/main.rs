@@ -26,9 +26,9 @@ fn main() -> Result<()> {
     let local_routes = netlink::route::local_routes(route_socket).unwrap_or(Rtbl::empty());
     let mut socks = netlink::sock::all_sockets(&interfaces, local_routes)?;
     let mut output = termtree::Tree::new();
-
+    let self_user_ns = procs::get_user_ns(&procs::ourself()?).ok();
     let mut lps = all_processes()?
-        .filter_map(|p| procs::ProcDesc::inspect_ps(p, &mut socks, &users_cache).ok())
+        .filter_map(|p| procs::ProcDesc::inspect_ps(p, &mut socks, &users_cache, self_user_ns).ok())
         .filter(|p| !p.sockets.is_empty())
         .collect::<Vec<_>>();
     lps.iter_mut().for_each(|p| p.sockets.sort());

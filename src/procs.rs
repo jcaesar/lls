@@ -1,9 +1,8 @@
 use super::netlink::sock::SockInfo;
 use crate::Ino;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use procfs::process::Process;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::{collections::HashMap, ffi::OsString, os::unix::prelude::OsStringExt};
 use users::{Users, UsersCache};
 
 pub type Pid = i32;
@@ -21,15 +20,17 @@ impl<'a> ProcDesc<'a> {
         p: Result<Process, procfs::ProcError>,
         socks: &mut HashMap<Ino, SockInfo<'a>>,
         user_names: &UsersCache,
+        self_user_ns: Option<u64>,
     ) -> Result<ProcDesc<'a>> {
         let p = p?;
         let name = ProcDesc::ps_name(&p);
-        let user = match p.root().ok().filter(|p| p == &PathBuf::from("/")).is_some() {
-            true => user_names
-                .get_user_by_uid(p.uid()?)
-                .map_or_else(String::new, |u| u.name().to_string_lossy().into_owned()),
-            false => String::new(),
-        };
+        let user = user_names
+            .get_user_by_uid(p.uid()?)
+            .filter(|_| get_user_ns(&p).ok() == self_user_ns)
+            .map_or_else(
+                || format!("{}", p.uid().unwrap()),
+                |u| u.name().to_string_lossy().into_owned(),
+            );
         let sockets = p
             .fd()?
             .filter_map(|f| match f.ok()?.target {
@@ -65,4 +66,16 @@ impl Ord for ProcDesc<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (&self.sockets, self.pid, &self.name).cmp(&(&other.sockets, other.pid, &other.name))
     }
+}
+
+pub fn get_user_ns(p: &Process) -> Result<u64> {
+    Ok(p.namespaces()
+        .context("Namespaces inaccessible")?
+        .get(&OsString::from_vec(b"user".to_vec()))
+        .context("No user ns")?
+        .identifier)
+}
+
+pub fn ourself() -> Result<Process> {
+    Ok(procfs::process::Process::myself()?)
 }
