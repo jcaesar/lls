@@ -16,7 +16,7 @@ pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
     packet.header.sequence_number = 1;
 
     let mut map = HashMap::new();
-    drive_req(packet, &socket, |inner| {
+    drive_req(packet, socket, |inner| {
         if let RtnlMessage::NewLink(nl) = inner {
             if let Some(name) = nl.nlas.into_iter().find_map(|s| match s {
                 LinkNla::IfName(n) => Some(n),
@@ -88,7 +88,7 @@ pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
     };
 
     let mut ret = Vec::new();
-    drive_req(packet, &socket, |inner| {
+    drive_req(packet, socket, |inner| {
         if let RtnlMessage::NewRoute(route) = inner {
             if route.header.table == RT_TABLE_LOCAL && route.header.kind == RTN_LOCAL {
                 let iface = route.nlas.iter().find_map(|nla| match nla {

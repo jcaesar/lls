@@ -141,13 +141,15 @@ impl<'a> SockInfo<'a> {
         interfaces: &'a HashMap<u32, String>,
         local_routes: &Rtbl,
     ) -> Self {
-        let family = ir
+        let family = if ir
             .nlas
             .iter()
-            .find(|nla| matches!(nla, Nla::SkV6Only(false)))
-            .is_some()
-            .then_some(Family::Both)
-            .unwrap_or(family);
+            .any(|nla| matches!(&nla, Nla::SkV6Only(false)))
+        {
+            Family::Both
+        } else {
+            family
+        };
         let addr = ir.header.socket_id.source_address;
         let iface = interfaces
             .get(&ir.header.socket_id.interface_id)
