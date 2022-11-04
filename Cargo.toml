@@ -1,7 +1,10 @@
 [package]
-name = "tols"
+name = "lls"
 version = "0.1.0"
 edition = "2021"
+authors = ["Julius Michaelis <gitter@liftm.de>"]
+repository = "https://github.com/jcaesar/lls"
+license = "MIT"
 
 [dependencies]
 ansi_term = "0.12.1"
@@ -17,5 +20,5 @@ unicode-width = "0.1.10"
 users = "0.11.0"
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 strip = "debuginfo"

@@ -203,6 +203,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4d2456c373231a208ad294c33dc5bff30051eafd954cd4caae83a712b12854d"
 
 [[package]]
+name = "lls"
+version = "0.1.0"
+dependencies = [
+ "ansi_term",
+ "anyhow",
+ "itertools",
+ "netlink-packet-core",
+ "netlink-packet-route",
+ "netlink-packet-sock-diag",
+ "netlink-sys",
+ "procfs",
+ "terminal_size",
+ "unicode-width",
+ "users",
+]
+
+[[package]]
 name = "log"
 version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -418,23 +435,6 @@ dependencies = [
  "libc",
  "wasi",
  "winapi",
-]
-
-[[package]]
-name = "tols"
-version = "0.1.0"
-dependencies = [
- "ansi_term",
- "anyhow",
- "itertools",
- "netlink-packet-core",
- "netlink-packet-route",
- "netlink-packet-sock-diag",
- "netlink-sys",
- "procfs",
- "terminal_size",
- "unicode-width",
- "users",
 ]
 
 [[package]]
