@@ -36,12 +36,11 @@ fn main() -> Result<()> {
     lps.sort();
     for pd in lps {
         output.node(
-            format!(
-                "{} / {} / {}",
-                pd.pid,
-                pd.user,
-                pd.name.as_deref().unwrap_or("???")
-            ),
+            if let Some(name) = pd.name {
+                format!("{name} (pid {} user {})", pd.pid, pd.user,)
+            } else {
+                format!("pid {} user {}", pd.pid, pd.user,)
+            },
             sockets_tree(&pd.sockets),
         );
     }
@@ -53,7 +52,7 @@ fn main() -> Result<()> {
     socks.iter_mut().for_each(|(_, x)| x.sort());
     socks.sort_by_cached_key(|t| t.1.clone());
     for (uid, socks) in socks {
-        output.node(format!("??? / {uid} / ???",), sockets_tree(socks));
+        output.node(format!("??? (user {uid})",), sockets_tree(socks));
     }
     let stdout = &mut BufWriter::new(stdout());
     let size = terminal_size::terminal_size().map(|(terminal_size::Width(w), _)| w.into());
