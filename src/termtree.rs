@@ -24,9 +24,9 @@ impl Tree {
         Self(vec![])
     }
 
-    pub fn render(&self, mw: Option<usize>, ret: &mut impl FnMut(&[u8])) {
+    pub fn render(&self, mw: Option<usize>, color: bool, ret: &mut impl FnMut(&[u8])) {
         for entry in &self.0 {
-            render_entry(entry, mw, ret, None);
+            render_entry(entry, mw, color, ret, None);
         }
     }
 }
@@ -51,10 +51,11 @@ fn render_pfx(prefix: Option<&Prefix>, rightmost: bool, ret: &mut impl FnMut(&st
 fn render_entry(
     tree: &Entry,
     mw: Option<usize>,
+    color: bool,
     ret: &mut impl FnMut(&[u8]),
     prefix: Option<&Prefix<'_>>,
 ) {
-    if mw.is_some() {
+    if color {
         let mut out = String::new();
         render_pfx(prefix, true, &mut |s| out.push_str(s));
         ret(format!("{}", GREY.paint(out)).as_bytes());
@@ -80,7 +81,7 @@ fn render_entry(
     } else {
         out.push_str(&tree.data);
     }
-    let collapsed = collapse(&tree.children.0, mw.map(|mw| mw - out.width()));
+    let collapsed = collapse(&tree.children.0, mw.map(|mw| mw - out.width()), color);
     if let Some(collapsed) = &collapsed {
         out.push_str(collapsed);
     }
@@ -94,13 +95,13 @@ fn render_entry(
             );
             let child = child.into_inner();
             let prefix = Prefix { last, prefix };
-            render_entry(child, mw, ret, Some(&prefix));
+            render_entry(child, mw, color, ret, Some(&prefix));
         }
     }
 }
 
-fn collapse(children: &[Entry], mw: Option<usize>) -> Option<String> {
-    let sep = if mw.is_some() {
+fn collapse(children: &[Entry], mw: Option<usize>, color: bool) -> Option<String> {
+    let sep = if color {
         format!("{}", GREY.paint(" / "))
     } else {
         " / ".into()
@@ -114,7 +115,7 @@ fn collapse(children: &[Entry], mw: Option<usize>) -> Option<String> {
                 } else {
                     Some(format!(
                         "{sep}{data}{}",
-                        collapse(&children.0, mw.map(|mw| mw.saturating_sub(nw)))?
+                        collapse(&children.0, mw.map(|mw| mw.saturating_sub(nw)), color)?
                     ))
                 }
             } else {

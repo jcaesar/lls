@@ -11,6 +11,7 @@ use netlink::{
 use procfs::process::all_processes;
 use std::{
     collections::BTreeMap,
+    env::var_os,
     io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
@@ -55,10 +56,11 @@ fn main() -> Result<()> {
         output.node(format!("??? / {uid} / ???",), sockets_tree(socks));
     }
     let stdout = &mut BufWriter::new(stdout());
-    output.render(
-        terminal_size::terminal_size().map(|(terminal_size::Width(w), _)| w.into()),
-        &mut |s| stdout.write_all(s).expect("stdout shut"),
-    );
+    let size = terminal_size::terminal_size().map(|(terminal_size::Width(w), _)| w.into());
+    let color = size.is_some() && var_os("NO_COLOR").is_none();
+    output.render(size, color, &mut |s| {
+        stdout.write_all(s).expect("stdout shut")
+    });
 
     Ok(())
 }
