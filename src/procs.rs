@@ -60,7 +60,57 @@ fn ps_name(p: &Process) -> Option<String> {
                 .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
         })
         .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
-    name
+    if let (Some(name), Some(py)) = (&name, py_ps_name(comm, exe, cmdline)) {
+        Some(format!("{name} {py}"))
+    } else {
+        name
+    }
+}
+
+fn py_ps_name(
+    comm: &Option<String>,
+    exe: &Option<PathBuf>,
+    cmdline: &Option<Vec<String>>,
+) -> Option<String> {
+    let comm = comm.as_ref()?;
+    let exe = exe.as_ref()?;
+    let cmdline = cmdline.as_ref()?;
+    if !looks_pythonish(comm) || !looks_pythonish(&exe.file_name()?.to_string_lossy()) {
+        None?
+    }
+    // I'm not entirely sure this is safe against python adding more options in the future
+    let has_arg = ["--check-hash-based-pycs", "-m", "-Q", "-W", "-X", "-c"];
+    let no_arg = [
+        "-3", "-b", "-B", "-d", "-E", "-h", "-i", "-I", "-O", "-OO", "-q", "-R", "-s", "-S", "-t",
+        "-u", "-v", "-V", "-x",
+    ];
+    let mut cmdline = cmdline.iter();
+    if !looks_pythonish(cmdline.next()?) {
+        None?
+    }
+    while let Some(arg) = cmdline.next() {
+        if arg == "--" {
+            return cmdline.next().cloned();
+        } else if arg == "-m" {
+            return Some(format!("-m {}", cmdline.next()?));
+        } else if has_arg.contains(&arg.as_str()) {
+            cmdline.next();
+        } else if no_arg.contains(&arg.as_str()) {
+        } else if arg.starts_with("-") {
+            return None; // Unknown arg, better give up
+        } else {
+            return Some(arg.clone());
+        }
+    }
+    None
+}
+
+fn looks_pythonish(comm: &str) -> bool {
+    if let Some(suffix) = comm.strip_prefix("python") {
+        suffix.chars().all(|c| c.is_numeric() || c == '.')
+    } else {
+        false
+    }
 }
 
 fn remove_paren(x: String) -> String {
