@@ -2,7 +2,7 @@ use super::netlink::sock::SockInfo;
 use crate::Ino;
 use anyhow::{Context, Result};
 use procfs::process::Process;
-use std::{collections::HashMap, ffi::OsString, os::unix::prelude::OsStringExt};
+use std::{collections::HashMap, ffi::OsString, os::unix::prelude::OsStringExt, path::PathBuf};
 use users::{Users, UsersCache};
 
 pub type Pid = i32;
@@ -23,7 +23,7 @@ impl<'a> ProcDesc<'a> {
         self_user_ns: Option<u64>,
     ) -> Result<ProcDesc<'a>> {
         let p = p?;
-        let name = ProcDesc::ps_name(&p);
+        let name = ps_name(&p);
         let user = user_names
             .get_user_by_uid(p.uid()?)
             .filter(|_| get_user_ns(&p).ok() == self_user_ns)
@@ -45,15 +45,29 @@ impl<'a> ProcDesc<'a> {
             user,
         })
     }
+}
 
-    pub fn ps_name(p: &Process) -> Option<String> {
-        p.exe()
-            .ok()
+fn ps_name(p: &Process) -> Option<String> {
+    let comm = &p.stat().ok().map(|s| remove_paren(s.comm));
+    let exe = &p.exe().ok();
+    let cmdline = &p.cmdline().ok();
+    let name = comm
+        .clone()
+        .or_else(|| {
             // I considered checking whether to check if the exe file_name is on $PATH
             // and print the whole path if not. Nah.
-            .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
-            .or(p.cmdline().ok().and_then(|v| v.into_iter().next()))
-    }
+            exe.as_ref()
+                .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
+        })
+        .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
+    name
+}
+
+fn remove_paren(x: String) -> String {
+    x.strip_prefix("(")
+        .and_then(|x| x.strip_suffix(")"))
+        .map(|x| x.into())
+        .unwrap_or(x)
 }
 
 impl PartialOrd for ProcDesc<'_> {
