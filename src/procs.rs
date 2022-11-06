@@ -2,7 +2,10 @@ use super::netlink::sock::SockInfo;
 use crate::Ino;
 use anyhow::{Context, Result};
 use procfs::process::Process;
-use std::{collections::HashMap, ffi::OsString, os::unix::prelude::OsStringExt, path::PathBuf};
+use std::{
+    collections::HashMap, ffi::OsString, ops::ControlFlow, os::unix::prelude::OsStringExt,
+    path::PathBuf,
+};
 use users::{Users, UsersCache};
 
 pub type Pid = i32;
@@ -62,9 +65,30 @@ fn ps_name(p: &Process) -> Option<String> {
         .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
     if let py @ Some(_) = py_ps_name(&name, comm, exe, cmdline) {
         py
+    } else if let lua @ Some(_) = lua_ps_name(&name, comm, exe, cmdline) {
+        lua
     } else {
         name
     }
+}
+
+fn lua_ps_name(
+    name: &Option<String>,
+    comm: &Option<String>,
+    exe: &Option<PathBuf>,
+    cmdline: &Option<Vec<String>>,
+) -> Option<String> {
+    interpreter_ps_name(
+        "lua",
+        ".lua",
+        &["-l"],
+        &["-i", "-E"],
+        name,
+        cmdline,
+        comm,
+        exe,
+        &|_, _| ControlFlow::Continue(()),
+    )
 }
 
 fn py_ps_name(
@@ -74,13 +98,34 @@ fn py_ps_name(
     cmdline: &Option<Vec<String>>,
 ) -> Option<String> {
     // I'm not entirely sure this is safe against python adding more options in the future
-    let has_arg = ["--check-hash-based-pycs", "-m", "-Q", "-W", "-X"]; // Deliberately exclude -c
-    let no_arg = [
+    let has_arg = &["--check-hash-based-pycs", "-m", "-Q", "-W", "-X"]; // Deliberately exclude -c
+    let no_arg = &[
         "-3", "-b", "-B", "-d", "-E", "-h", "-i", "-I", "-O", "-OO", "-q", "-R", "-s", "-S", "-t",
         "-u", "-v", "-V", "-x",
     ];
-    let interpreter = "python";
-    let extension = ".py";
+    let special = &|arg: &str, next: Option<&str>| {
+        if arg == "-m" {
+            ControlFlow::Break((|| Some(format!("{} -m {}", name.as_ref()?, next?)))())
+        } else {
+            ControlFlow::Continue(())
+        }
+    };
+    interpreter_ps_name(
+        "python", ".py", has_arg, no_arg, name, cmdline, comm, exe, special,
+    )
+}
+
+fn interpreter_ps_name(
+    interpreter: &str,
+    extension: &str,
+    has_arg: &[&str],
+    no_arg: &[&str],
+    name: &Option<String>,
+    cmdline: &Option<Vec<String>>,
+    comm: &Option<String>,
+    exe: &Option<PathBuf>,
+    special: &impl Fn(&str, Option<&str>) -> ControlFlow<Option<String>>,
+) -> Option<String> {
     let name = name.as_ref()?;
     let cmdline = cmdline.as_ref()?;
     if !looks_ish(interpreter, comm.as_ref()?)
@@ -88,15 +133,15 @@ fn py_ps_name(
     {
         None?
     }
-    let mut cmdline = cmdline.iter();
+    let mut cmdline = cmdline.iter().peekable();
     if !looks_ish(interpreter, cmdline.next()?) {
         None?
     }
     while let Some(arg) = cmdline.next() {
-        if arg == "--" {
+        if let ControlFlow::Break(v) = special(arg, cmdline.peek().map(|x| x.as_str())) {
+            return v;
+        } else if arg == "--" {
             return cmdline.next().cloned();
-        } else if arg == "-m" {
-            return Some(format!("{name} -m {}", cmdline.next()?));
         } else if has_arg.contains(&arg.as_str()) {
             cmdline.next();
         } else if no_arg.contains(&arg.as_str()) {
