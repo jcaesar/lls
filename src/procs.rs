@@ -60,53 +60,61 @@ fn ps_name(p: &Process) -> Option<String> {
                 .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
         })
         .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
-    if let (Some(name), Some(py)) = (&name, py_ps_name(comm, exe, cmdline)) {
-        Some(format!("{name} {py}"))
+    if let py @ Some(_) = py_ps_name(&name, comm, exe, cmdline) {
+        py
     } else {
         name
     }
 }
 
 fn py_ps_name(
+    name: &Option<String>,
     comm: &Option<String>,
     exe: &Option<PathBuf>,
     cmdline: &Option<Vec<String>>,
 ) -> Option<String> {
-    let comm = comm.as_ref()?;
-    let exe = exe.as_ref()?;
-    let cmdline = cmdline.as_ref()?;
-    if !looks_pythonish(comm) || !looks_pythonish(&exe.file_name()?.to_string_lossy()) {
-        None?
-    }
     // I'm not entirely sure this is safe against python adding more options in the future
-    let has_arg = ["--check-hash-based-pycs", "-m", "-Q", "-W", "-X", "-c"];
+    let has_arg = ["--check-hash-based-pycs", "-m", "-Q", "-W", "-X"]; // Deliberately exclude -c
     let no_arg = [
         "-3", "-b", "-B", "-d", "-E", "-h", "-i", "-I", "-O", "-OO", "-q", "-R", "-s", "-S", "-t",
         "-u", "-v", "-V", "-x",
     ];
+    let interpreter = "python";
+    let extension = ".py";
+    let name = name.as_ref()?;
+    let cmdline = cmdline.as_ref()?;
+    if !looks_ish(interpreter, comm.as_ref()?)
+        || !looks_ish(interpreter, &exe.as_ref()?.file_name()?.to_string_lossy())
+    {
+        None?
+    }
     let mut cmdline = cmdline.iter();
-    if !looks_pythonish(cmdline.next()?) {
+    if !looks_ish(interpreter, cmdline.next()?) {
         None?
     }
     while let Some(arg) = cmdline.next() {
         if arg == "--" {
             return cmdline.next().cloned();
         } else if arg == "-m" {
-            return Some(format!("-m {}", cmdline.next()?));
+            return Some(format!("{name} -m {}", cmdline.next()?));
         } else if has_arg.contains(&arg.as_str()) {
             cmdline.next();
         } else if no_arg.contains(&arg.as_str()) {
         } else if arg.starts_with("-") {
             return None; // Unknown arg, better give up
         } else {
-            return Some(arg.clone());
+            if arg.ends_with(extension) {
+                return Some(arg.clone());
+            } else {
+                return Some(format!("{name} {arg}"));
+            }
         }
     }
     None
 }
 
-fn looks_pythonish(comm: &str) -> bool {
-    if let Some(suffix) = comm.strip_prefix("python") {
+fn looks_ish(name: &str, comm: &str) -> bool {
+    if let Some(suffix) = comm.strip_prefix(name) {
         suffix.chars().all(|c| c.is_numeric() || c == '.')
     } else {
         false
