@@ -67,9 +67,48 @@ fn ps_name(p: &Process) -> Option<String> {
         py
     } else if let lua @ Some(_) = lua_ps_name(&name, comm, exe, cmdline) {
         lua
+    } else if let java @ Some(_) = java_ps_name(&name, comm, exe, cmdline) {
+        java
     } else {
         name
     }
+}
+
+fn java_ps_name(
+    name: &Option<String>,
+    comm: &Option<String>,
+    exe: &Option<PathBuf>,
+    cmdline: &Option<Vec<String>>,
+) -> Option<String> {
+    let special = &|arg: &str, next: Option<&str>| {
+        if arg == "-jar" {
+            ControlFlow::Break(
+                next.filter(|jar| jar.ends_with(".jar"))
+                    .map(|s| s.to_owned()),
+            )
+        } else {
+            ControlFlow::Continue(())
+        }
+    };
+    interpreter_ps_name(
+        "java",
+        ".jar", // won't be used
+        &["-classpath", "-cp"],
+        &["-d32", "-d64"],
+        &[
+            "-javaagent:",
+            "-agentlib:",
+            "-agentpath",
+            "-verbose:",
+            "-D",
+            "-X",
+        ],
+        name,
+        cmdline,
+        comm,
+        exe,
+        special,
+    )
 }
 
 fn lua_ps_name(
@@ -83,6 +122,7 @@ fn lua_ps_name(
         ".lua",
         &["-l"],
         &["-i", "-E"],
+        &[],
         name,
         cmdline,
         comm,
@@ -111,7 +151,16 @@ fn py_ps_name(
         }
     };
     interpreter_ps_name(
-        "python", ".py", has_arg, no_arg, name, cmdline, comm, exe, special,
+        "python",
+        ".py",
+        has_arg,
+        no_arg,
+        &[],
+        name,
+        cmdline,
+        comm,
+        exe,
+        special,
     )
 }
 
@@ -120,6 +169,7 @@ fn interpreter_ps_name(
     extension: &str,
     has_arg: &[&str],
     no_arg: &[&str],
+    prefix_arg: &[&str],
     name: &Option<String>,
     cmdline: &Option<Vec<String>>,
     comm: &Option<String>,
@@ -145,6 +195,7 @@ fn interpreter_ps_name(
         } else if has_arg.contains(&arg.as_str()) {
             cmdline.next();
         } else if no_arg.contains(&arg.as_str()) {
+        } else if prefix_arg.iter().any(|&pfx| arg.starts_with(pfx)) {
         } else if arg.starts_with("-") {
             return None; // Unknown arg, better give up
         } else {
@@ -159,6 +210,7 @@ fn interpreter_ps_name(
 }
 
 fn looks_ish(name: &str, comm: &str) -> bool {
+    let comm = &comm[comm.rfind("/").map_or(0, |p| p + 1)..];
     if let Some(suffix) = comm.strip_prefix(name) {
         suffix.chars().all(|c| c.is_numeric() || c == '.')
     } else {
@@ -195,4 +247,68 @@ pub fn get_user_ns(p: &Process) -> Result<u64> {
 
 pub fn ourself() -> Result<Process> {
     Ok(procfs::process::Process::myself()?)
+}
+
+#[cfg(test)]
+mod test {
+    #[test]
+    fn py_ps_name_synapse() {
+        let cmdline = [
+            "/usr/bin/python3",
+            "-m",
+            "synapse.app.homeserver",
+            "--config-path=/etc/synapse/homeserver.yaml",
+        ]
+        .into_iter()
+        .map(|s| s.to_owned())
+        .collect();
+        let py = &Some("python".into());
+        let name = super::py_ps_name(py, py, &Some("/usr/bin/python3".into()), &Some(cmdline));
+        assert_eq!(name.as_deref(), Some("python -m synapse.app.homeserver"));
+    }
+
+    #[test]
+    fn java_ps_name_flink() {
+        let cmdline = [
+            "/opt/java/openjdk/bin/java",
+            "-Xmx1073741824",
+            "-Xms1073741824",
+            "-XX:MaxMetaspaceSize=268435456",
+            "-Dlog.file=/opt/flink/log/flink--standalonesession-0-pride.log",
+            "-Dlog4j.configuration=file:/opt/flink/conf/log4j-console.properties",
+            "-Dlog4j.configurationFile=file:/opt/flink/conf/log4j-console.properties",
+            "-Dlogback.configurationFile=file:/opt/flink/conf/logback-console.xml",
+            "-classpath",
+            "/opt/flink/lib/flink-cep-1.16.0.jar:/opt…::::",
+            "org.apache.flink.runtime.entrypoint.StandaloneSessionClusterEntrypoint",
+            "-D",
+            "jobmanager.memory.off-heap.size=134217728b",
+            "-D",
+            "jobmanager.memory.jvm-overhead.min=201326592b",
+            "-D",
+            "jobmanager.memory.jvm-metaspace.size=268435456b",
+            "-D",
+            "jobmanager.memory.heap.size=1073741824b",
+            "-D",
+            "jobmanager.memory.jvm-overhead.max=201326592b",
+            "--configDir",
+            "/opt/flink/conf",
+            "--executionMode",
+            "cluster",
+        ]
+        .into_iter()
+        .map(|s| s.to_owned())
+        .collect();
+        let java = &Some("java".to_owned());
+        let name = super::java_ps_name(
+            java,
+            java,
+            &Some("/opt/java/openjdk/bin/java".into()),
+            &Some(cmdline),
+        );
+        assert_eq!(
+            name.as_deref(),
+            Some("java org.apache.flink.runtime.entrypoint.StandaloneSessionClusterEntrypoint")
+        );
+    }
 }
