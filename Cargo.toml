@@ -5,6 +5,9 @@ edition = "2021"
 authors = ["Julius Michaelis <gitter@liftm.de>"]
 repository = "https://github.com/jcaesar/lls"
 license = "MIT"
+categories = ["command-line-utilities"]
+keywords = ["listening", "socket", "linux", "cli"]
+readme = "README"
 
 [dependencies]
 ansi_term = "0.12.1"
@@ -20,5 +23,4 @@ unicode-width = "0.1.10"
 users = "0.11.0"
 
 [profile.release]
-lto = "fat"
-strip = "debuginfo"
+lto = "thin"
