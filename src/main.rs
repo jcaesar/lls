@@ -11,7 +11,7 @@ use netlink::{
 use procfs::process::all_processes;
 use std::{
     collections::BTreeMap,
-    env::var_os,
+    env::{args, var_os},
     io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
@@ -21,6 +21,11 @@ use users::UsersCache;
 pub type Ino = u64;
 
 fn main() -> Result<()> {
+    if args().len() > 1 {
+        print!("{}", include_str!("../README"));
+        return Ok(());
+    }
+
     let users_cache = UsersCache::new();
     let route_socket = &netlink::route::socket();
     let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();

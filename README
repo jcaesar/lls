@@ -1,0 +1,25 @@
+lls - list listening sockets / listening ls
+Julius Michaelis <lls@liftm.de>
+
+USAGE:
+    lls
+    lls has no command-line options
+
+OUTPUT:
+    lls outputs a tree of listening sockets, grouped by process and port, e.g.:
+    
+    sshd (pid 137 user root)
+    └ :22 tcp
+      └ 0.0.0.0 + ::
+    
+    The output parts are as follows:
+
+    {process name} (pid {process id} user {user name or id})
+    └ :{port} {transport protocol}
+      └ {listening address} ({interface})
+    
+    Groups with only one child are collapsed into a single line.
+    The initial example is thus actually displayed as:
+    
+    sshd (pid 137 user root) / :22 tcp / 0.0.0.0 + ::
+
