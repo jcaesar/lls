@@ -268,6 +268,18 @@ mod test {
     }
 
     #[test]
+    fn py_ps_name_mms() {
+        let cmdline = ["/usr/bin/python", "/home/self/MMS/app.py"]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect();
+
+        let py = &Some("python".into());
+        let name = super::py_ps_name(py, py, &Some("/usr/bin/python3.10".into()), &Some(cmdline));
+        assert_eq!(name.as_deref(), Some("/home/self/MMS/app.py"));
+    }
+
+    #[test]
     fn java_ps_name_flink() {
         let cmdline = [
             "/opt/java/openjdk/bin/java",
