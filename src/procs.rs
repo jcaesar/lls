@@ -18,6 +18,13 @@ pub struct ProcDesc<'a> {
     pub sockets: Vec<SockInfo<'a>>,
 }
 
+struct ProcNamePre {
+    name: Option<String>,
+    comm: Option<String>,
+    exe: Option<PathBuf>,
+    cmdline: Option<Vec<String>>,
+}
+
 impl<'a> ProcDesc<'a> {
     pub fn inspect_ps(
         p: Result<Process, procfs::ProcError>,
@@ -51,9 +58,9 @@ impl<'a> ProcDesc<'a> {
 }
 
 fn ps_name(p: &Process) -> Option<String> {
-    let comm = &p.stat().ok().map(|s| remove_paren(s.comm));
-    let exe = &p.exe().ok();
-    let cmdline = &p.cmdline().ok();
+    let comm = p.stat().ok().map(|s| remove_paren(s.comm));
+    let exe = p.exe().ok();
+    let cmdline = p.cmdline().ok();
     let name = comm
         .clone()
         .or_else(|| {
@@ -63,23 +70,24 @@ fn ps_name(p: &Process) -> Option<String> {
                 .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
         })
         .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
-    if let py @ Some(_) = py_ps_name(&name, comm, exe, cmdline) {
+    let proc_name_pre = ProcNamePre {
+        comm,
+        exe,
+        cmdline,
+        name,
+    };
+    if let py @ Some(_) = py_ps_name(&proc_name_pre) {
         py
-    } else if let lua @ Some(_) = lua_ps_name(&name, comm, exe, cmdline) {
+    } else if let lua @ Some(_) = lua_ps_name(&proc_name_pre) {
         lua
-    } else if let java @ Some(_) = java_ps_name(&name, comm, exe, cmdline) {
+    } else if let java @ Some(_) = java_ps_name(&proc_name_pre) {
         java
     } else {
-        name
+        proc_name_pre.name
     }
 }
 
-fn java_ps_name(
-    name: &Option<String>,
-    comm: &Option<String>,
-    exe: &Option<PathBuf>,
-    cmdline: &Option<Vec<String>>,
-) -> Option<String> {
+fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     let special = &|arg: &str, next: Option<&str>| {
         if arg == "-jar" {
             ControlFlow::Break(
@@ -103,40 +111,24 @@ fn java_ps_name(
             "-D",
             "-X",
         ],
-        name,
-        cmdline,
-        comm,
-        exe,
+        proc_name_pre,
         special,
     )
 }
 
-fn lua_ps_name(
-    name: &Option<String>,
-    comm: &Option<String>,
-    exe: &Option<PathBuf>,
-    cmdline: &Option<Vec<String>>,
-) -> Option<String> {
+fn lua_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     interpreter_ps_name(
         "lua",
         ".lua",
         &["-l"],
         &["-i", "-E"],
         &[],
-        name,
-        cmdline,
-        comm,
-        exe,
+        proc_name_pre,
         &|_, _| ControlFlow::Continue(()),
     )
 }
 
-fn py_ps_name(
-    name: &Option<String>,
-    comm: &Option<String>,
-    exe: &Option<PathBuf>,
-    cmdline: &Option<Vec<String>>,
-) -> Option<String> {
+fn py_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     // I'm not entirely sure this is safe against python adding more options in the future
     let has_arg = &["--check-hash-based-pycs", "-m", "-Q", "-W", "-X"]; // Deliberately exclude -c
     let no_arg = &[
@@ -145,7 +137,9 @@ fn py_ps_name(
     ];
     let special = &|arg: &str, next: Option<&str>| {
         if arg == "-m" {
-            ControlFlow::Break((|| Some(format!("{} -m {}", name.as_ref()?, next?)))())
+            ControlFlow::Break((|| {
+                Some(format!("{} -m {}", proc_name_pre.name.as_ref()?, next?))
+            })())
         } else {
             ControlFlow::Continue(())
         }
@@ -156,10 +150,7 @@ fn py_ps_name(
         has_arg,
         no_arg,
         &[],
-        name,
-        cmdline,
-        comm,
-        exe,
+        proc_name_pre,
         special,
     )
 }
@@ -170,16 +161,16 @@ fn interpreter_ps_name(
     has_arg: &[&str],
     no_arg: &[&str],
     prefix_arg: &[&str],
-    name: &Option<String>,
-    cmdline: &Option<Vec<String>>,
-    comm: &Option<String>,
-    exe: &Option<PathBuf>,
+    proc_name_pre: &ProcNamePre,
     special: &impl Fn(&str, Option<&str>) -> ControlFlow<Option<String>>,
 ) -> Option<String> {
-    let name = name.as_ref()?;
-    let cmdline = cmdline.as_ref()?;
-    if !looks_ish(interpreter, comm.as_ref()?)
-        || !looks_ish(interpreter, &exe.as_ref()?.file_name()?.to_string_lossy())
+    let name = proc_name_pre.name.as_ref()?;
+    let cmdline = proc_name_pre.cmdline.as_ref()?;
+    if !looks_ish(interpreter, proc_name_pre.comm.as_ref()?)
+        || !looks_ish(
+            interpreter,
+            &proc_name_pre.exe.as_ref()?.file_name()?.to_string_lossy(),
+        )
     {
         None?
     }
@@ -251,6 +242,8 @@ pub fn ourself() -> Result<Process> {
 
 #[cfg(test)]
 mod test {
+    use super::ProcNamePre;
+
     #[test]
     fn py_ps_name_synapse() {
         let cmdline = [
@@ -262,8 +255,12 @@ mod test {
         .into_iter()
         .map(|s| s.to_owned())
         .collect();
-        let py = &Some("python".into());
-        let name = super::py_ps_name(py, py, &Some("/usr/bin/python3".into()), &Some(cmdline));
+        let name = super::py_ps_name(&ProcNamePre {
+            name: Some("python".into()),
+            comm: Some("python".into()),
+            exe: Some("/usr/bin/python3".into()),
+            cmdline: Some(cmdline),
+        });
         assert_eq!(name.as_deref(), Some("python -m synapse.app.homeserver"));
     }
 
@@ -274,8 +271,12 @@ mod test {
             .map(ToOwned::to_owned)
             .collect();
 
-        let py = &Some("python".into());
-        let name = super::py_ps_name(py, py, &Some("/usr/bin/python3.10".into()), &Some(cmdline));
+        let name = super::py_ps_name(&ProcNamePre {
+            name: Some("python".into()),
+            comm: Some("python".into()),
+            exe: Some("/usr/bin/python3.10".into()),
+            cmdline: Some(cmdline),
+        });
         assert_eq!(name.as_deref(), Some("/home/self/MMS/app.py"));
     }
 
@@ -311,13 +312,12 @@ mod test {
         .into_iter()
         .map(|s| s.to_owned())
         .collect();
-        let java = &Some("java".to_owned());
-        let name = super::java_ps_name(
-            java,
-            java,
-            &Some("/opt/java/openjdk/bin/java".into()),
-            &Some(cmdline),
-        );
+        let name = super::java_ps_name(&ProcNamePre {
+            name: Some("java".to_owned()),
+            comm: Some("java".to_owned()),
+            exe: Some("/opt/java/openjdk/bin/java".into()),
+            cmdline: Some(cmdline),
+        });
         assert_eq!(
             name.as_deref(),
             Some("java org.apache.flink.runtime.entrypoint.StandaloneSessionClusterEntrypoint")
