@@ -1,5 +1,6 @@
 [package]
 name = "lls"
+description = "list listening sockets"
 version = "0.1.0"
 edition = "2021"
 authors = ["Julius Michaelis <gitter@liftm.de>"]
