@@ -100,7 +100,7 @@ fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     };
     interpreter_ps_name(
         "java",
-        ".jar", // won't be used
+        None,
         &["-classpath", "-cp"],
         &["-d32", "-d64"],
         &[
@@ -119,7 +119,7 @@ fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
 fn lua_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     interpreter_ps_name(
         "lua",
-        ".lua",
+        Some(".lua"),
         &["-l"],
         &["-i", "-E"],
         &[],
@@ -146,7 +146,7 @@ fn py_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     };
     interpreter_ps_name(
         "python",
-        ".py",
+        Some(".py"),
         has_arg,
         no_arg,
         &[],
@@ -157,7 +157,7 @@ fn py_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
 
 fn interpreter_ps_name(
     interpreter: &str,
-    extension: &str,
+    extension: Option<&str>,
     has_arg: &[&str],
     no_arg: &[&str],
     prefix_arg: &[&str],
@@ -190,10 +190,13 @@ fn interpreter_ps_name(
         } else if arg.starts_with("-") {
             return None; // Unknown arg, better give up
         } else {
-            if arg.ends_with(extension) {
-                return Some(arg.clone());
-            } else {
-                return Some(format!("{name} {arg}"));
+            match extension {
+                Some(extension) if arg.ends_with(extension) => {
+                    return Some(arg.clone());
+                }
+                _ => {
+                    return Some(format!("{name} {arg}"));
+                }
             }
         }
     }
