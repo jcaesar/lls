@@ -82,6 +82,8 @@ fn ps_name(p: &Process) -> Option<String> {
         lua
     } else if let java @ Some(_) = java_ps_name(&proc_name_pre) {
         java
+    } else if let node @ Some(_) = node_ps_name(&proc_name_pre) {
+        node
     } else {
         proc_name_pre.name
     }
@@ -152,6 +154,115 @@ fn py_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
         &[],
         proc_name_pre,
         special,
+    )
+}
+
+fn node_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
+    let has_arg = &["-C", "--conditions", "-r", "--require"];
+    let no_arg = &[
+        "--abort-on-uncaught-exception",
+        "--completion-bash",
+        "--cpu-prof",
+        "--disallow-code-generation-from-strings",
+        "--enable-fips",
+        "--enable-source-maps",
+        "--experimental-global-webcrypto",
+        "--experimental-import-meta-resolve",
+        "--experimental-network-imports",
+        "--experimental-policy",
+        "--experimental-shadow-realm",
+        "--no-experimental-fetch",
+        "--no-experimental-global-customevent",
+        "--no-experimental-global-webcrypto",
+        "--no-experimental-repl-await",
+        "--experimental-vm-modules",
+        "--experimental-wasi-unstable-preview1",
+        "--experimental-wasm-modules",
+        "--force-context-aware",
+        "--force-fips",
+        "--frozen-intrinsics",
+        "--heap-prof",
+        "--insecure-http-parser",
+        "--jitless",
+        "--napi-modules",
+        "--no-deprecation",
+        "--no-extra-info-on-fatal-exception",
+        "--no-force-async-hooks-checks",
+        "--no-addons",
+        "--no-global-search-paths",
+        "--no-warnings",
+        "--node-memory-debug",
+        "--pending-deprecation",
+        "--preserve-symlinks",
+        "--preserve-symlinks-main",
+        "--prof",
+        "--prof-process",
+        "--report-compact",
+        "--report-on-fatalerror",
+        "--report-on-signal",
+        "--report-signal",
+        "--report-uncaught-exception",
+        "--throw-deprecation",
+        "--tls-max-v1.2",
+        "--tls-max-v1.3",
+        "--tls-min-v1.0",
+        "--tls-min-v1.1",
+        "--tls-min-v1.2",
+        "--tls-min-v1.3",
+        "--trace-atomics-wait",
+        "--trace-deprecation",
+        "--trace-event-categories categories",
+        "--trace-event-file-pattern pattern",
+        "--trace-events-enabled",
+        "--trace-exit",
+        "--trace-sigint",
+        "--trace-sync-io",
+        "--trace-tls",
+        "--trace-uncaught",
+        "--trace-warnings",
+        "--track-heap-objects",
+        "--update-assert-snapshot",
+        "--use-bundled-ca",
+        "--use-openssl-ca",
+        "--v8-options",
+        "--zero-fill-buffers",
+        "-c",
+        "--check",
+        "-i",
+        "--interactive",
+    ];
+    let prefixes = &[
+        "--disable-proto=",
+        "--experimental-loader=",
+        "--heapsnapshot-near-heap-limit=",
+        "--heapsnapshot-signal=",
+        "--icu-data-dir=",
+        "--input-type=",
+        "--inspect-brk=",
+        "--inspect-port=",
+        "--inspect-publish-uid=",
+        "--inspect=",
+        "--max-http-header-size=",
+        "--openssl-config=",
+        "--policy-integrity=",
+        "--redirect-warnings=",
+        "--secure-heap=",
+        "--secure-heap-min=",
+        "--title=",
+        "--tls-cipher-list=",
+        "--tls-keylog=",
+        "--unhandled-rejections=",
+        "--use-largepages=",
+        "--v8-pool-size=",
+    ];
+    interpreter_ps_name(
+        "node",
+        None, // Too many ways to run js
+        has_arg,
+        no_arg,
+        prefixes,
+        proc_name_pre,
+        &|_, _| ControlFlow::Continue(()),
     )
 }
 
@@ -325,5 +436,21 @@ mod test {
             name.as_deref(),
             Some("java org.apache.flink.runtime.entrypoint.StandaloneSessionClusterEntrypoint")
         );
+    }
+
+    #[test]
+    fn node_ps_name_simple() {
+        let cmdline = ["node", "serve.js"]
+            .into_iter()
+            .map(ToOwned::to_owned)
+            .collect();
+
+        let name = super::node_ps_name(&ProcNamePre {
+            name: Some("node".into()),
+            comm: Some("node".into()),
+            exe: Some("/usr/bin/node".into()),
+            cmdline: Some(cmdline),
+        });
+        assert_eq!(name.as_deref(), Some("node serve.js"));
     }
 }
