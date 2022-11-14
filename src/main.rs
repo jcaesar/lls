@@ -22,7 +22,7 @@ pub type Ino = u64;
 
 fn main() -> Result<()> {
     if args().len() > 1 {
-        print!("{}", include_str!("../README"));
+        print!("{}", include_str!("help.txt"));
         return Ok(());
     }
 
