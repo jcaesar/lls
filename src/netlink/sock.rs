@@ -1,10 +1,11 @@
-use super::{drive_req, route::Rtbl};
+use super::{drive_req, nl_hdr_flags, route::Rtbl};
 use crate::Ino;
 use anyhow::Result;
+use netlink_packet_core::{NetlinkMessage, NLM_F_DUMP, NLM_F_REQUEST};
 use netlink_packet_sock_diag::{
     constants::*,
     inet::{nlas::Nla, ExtensionFlags, InetRequest, InetResponse, SocketId, StateFlags},
-    NetlinkHeader, NetlinkMessage, SockDiagMessage,
+    SockDiagMessage,
 };
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use std::{collections::HashMap, fmt::Display, net::IpAddr};
@@ -30,12 +31,9 @@ pub fn all_sockets(
 
     for family in families {
         for protocol in protocols {
-            let packet = NetlinkMessage {
-                header: NetlinkHeader {
-                    flags: NLM_F_REQUEST | NLM_F_DUMP,
-                    ..Default::default()
-                },
-                payload: SockDiagMessage::InetRequest(InetRequest {
+            let packet = NetlinkMessage::new(
+                nl_hdr_flags(NLM_F_REQUEST | NLM_F_DUMP),
+                SockDiagMessage::InetRequest(InetRequest {
                     family: family.proto_const(),
                     protocol: protocol.proto_const(),
                     socket_id: family.proto_socket_id(),
@@ -43,7 +41,7 @@ pub fn all_sockets(
                     states: StateFlags::all(),
                 })
                 .into(),
-            };
+            );
             drive_req(packet, &socket, |inner| match inner {
                 SockDiagMessage::InetResponse(response) => {
                     if response.header.socket_id.destination_port == 0 {

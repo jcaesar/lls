@@ -1,17 +1,20 @@
-use super::drive_req;
+use super::{drive_req, nl_hdr_flags};
 use anyhow::Result;
+use netlink_packet_core::{
+    NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
+};
 use netlink_packet_route::{
     constants::*, link::nlas::Nla as LinkNla, route::nlas::Nla as RouteNla, LinkMessage,
-    NetlinkHeader, NetlinkMessage, NetlinkPayload, RouteMessage, RtnlMessage,
+    RouteMessage, RtnlMessage,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, Socket, SocketAddr};
 use std::{cmp::Reverse, collections::HashMap, net::IpAddr};
 
 pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
-    let mut packet = NetlinkMessage {
-        header: NetlinkHeader::default(),
-        payload: NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
-    };
+    let mut packet = NetlinkMessage::new(
+        NetlinkHeader::default(),
+        NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
+    );
     packet.header.flags = NLM_F_DUMP | NLM_F_REQUEST;
     packet.header.sequence_number = 1;
 
@@ -79,13 +82,10 @@ pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
     let mut route_message = RouteMessage::default();
     route_message.header.table = RT_TABLE_LOCAL; // This is respected
     route_message.header.kind = RTN_LOCAL; // This is not respected
-    let packet = NetlinkMessage {
-        header: NetlinkHeader {
-            flags: NLM_F_REQUEST | NLM_F_DUMP,
-            ..Default::default()
-        },
-        payload: NetlinkPayload::from(RtnlMessage::GetRoute(route_message)),
-    };
+    let packet = NetlinkMessage::new(
+        nl_hdr_flags(NLM_F_REQUEST | NLM_F_DUMP),
+        NetlinkPayload::from(RtnlMessage::GetRoute(route_message)),
+    );
 
     let mut ret = Vec::new();
     drive_req(packet, socket, |inner| {

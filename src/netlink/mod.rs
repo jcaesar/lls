@@ -3,7 +3,7 @@ pub mod sock;
 
 use anyhow::Result;
 use netlink_packet_core::{
-    NetlinkDeserializable, NetlinkMessage, NetlinkPayload, NetlinkSerializable,
+    NetlinkDeserializable, NetlinkHeader, NetlinkMessage, NetlinkPayload, NetlinkSerializable,
 };
 use netlink_sys::Socket;
 
@@ -42,4 +42,10 @@ where
             }
         }
     }
+}
+
+pub fn nl_hdr_flags(flags: u16) -> NetlinkHeader {
+    let mut header = NetlinkHeader::default();
+    header.flags = flags;
+    header
 }
