@@ -1,7 +1,7 @@
 pub mod route;
 pub mod sock;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use netlink_packet_core::{
     NetlinkDeserializable, NetlinkHeader, NetlinkMessage, NetlinkPayload, NetlinkSerializable,
 };
@@ -32,7 +32,8 @@ where
             match rx_packet.payload {
                 NetlinkPayload::Done => return Ok(()),
                 NetlinkPayload::InnerMessage(inner) => recv(inner),
-                _ => todo!(),
+                NetlinkPayload::Error(err) => return Err(err.to_io()).context("Netlink error"),
+                _ => todo!("{:#?}", rx_packet.payload.message_type()),
             }
 
             offset += rx_packet.header.length as usize;
