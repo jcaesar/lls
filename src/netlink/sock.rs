@@ -91,6 +91,7 @@ impl Display for Family {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum Protocol {
     TCP,
     UDP,

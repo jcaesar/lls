@@ -69,7 +69,7 @@ fn ps_name(p: &Process) -> Option<String> {
             exe.as_ref()
                 .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
         })
-        .or(cmdline.as_ref().and_then(|v| v.get(0).cloned()));
+        .or_else(|| cmdline.as_ref().and_then(|v| v.get(0).cloned()));
     let proc_name_pre = ProcNamePre {
         comm,
         exe,
@@ -298,7 +298,7 @@ fn interpreter_ps_name(
             cmdline.next();
         } else if no_arg.contains(&arg.as_str()) {
         } else if prefix_arg.iter().any(|&pfx| arg.starts_with(pfx)) {
-        } else if arg.starts_with("-") {
+        } else if arg.starts_with('-') {
             return None; // Unknown arg, better give up
         } else {
             match extension {
@@ -315,7 +315,7 @@ fn interpreter_ps_name(
 }
 
 fn looks_ish(name: &str, comm: &str) -> bool {
-    let comm = &comm[comm.rfind("/").map_or(0, |p| p + 1)..];
+    let comm = &comm[comm.rfind('/').map_or(0, |p| p + 1)..];
     if let Some(suffix) = comm.strip_prefix(name) {
         suffix.chars().all(|c| c.is_numeric() || c == '.')
     } else {
@@ -324,8 +324,8 @@ fn looks_ish(name: &str, comm: &str) -> bool {
 }
 
 fn remove_paren(x: String) -> String {
-    x.strip_prefix("(")
-        .and_then(|x| x.strip_suffix(")"))
+    x.strip_prefix('(')
+        .and_then(|x| x.strip_suffix(')'))
         .map(|x| x.into())
         .unwrap_or(x)
 }

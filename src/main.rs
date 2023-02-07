@@ -29,7 +29,9 @@ fn main() -> Result<()> {
     let users_cache = UsersCache::new();
     let route_socket = &netlink::route::socket();
     let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
-    let local_routes = netlink::route::local_routes(route_socket).unwrap_or(Rtbl::empty());
+    let local_routes = netlink::route::local_routes(route_socket)
+        .ok()
+        .unwrap_or_else(Rtbl::empty);
     let mut socks =
         netlink::sock::all_sockets(&interfaces, local_routes).context("Get listening sockets")?;
     let mut output = termtree::Tree::new();
