@@ -1,6 +1,6 @@
 use super::{drive_req, nl_hdr_flags, route::Rtbl};
 use crate::Ino;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use netlink_packet_core::{NetlinkMessage, NLM_F_DUMP, NLM_F_REQUEST};
 use netlink_packet_sock_diag::{
     constants::*,
@@ -52,7 +52,8 @@ pub fn all_sockets(
                     }
                 }
                 _ => unreachable!("We made an InetRequest, we get an InetResponse, yeah?"),
-            })?;
+            })
+            .context("Read listening sockets")?;
         }
     }
     Ok(ret)

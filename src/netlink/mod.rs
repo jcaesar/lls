@@ -33,7 +33,7 @@ where
                 NetlinkPayload::Done => return Ok(()),
                 NetlinkPayload::InnerMessage(inner) => recv(inner),
                 NetlinkPayload::Error(err) => return Err(err.to_io()).context("Netlink error"),
-                _ => todo!("{:#?}", rx_packet.payload.message_type()),
+                p => todo!("Unexpected netlink payload {:?}", p.message_type()),
             }
 
             offset += rx_packet.header.length as usize;

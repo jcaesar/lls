@@ -1,5 +1,5 @@
 use super::{drive_req, nl_hdr_flags};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use netlink_packet_core::{
     NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
 };
@@ -28,7 +28,8 @@ pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
                 map.insert(nl.header.index, name);
             }
         }
-    })?;
+    })
+    .context("Get interface names")?;
 
     Ok(map)
 }
@@ -46,13 +47,11 @@ struct Route {
     iface: u32,
 }
 
+#[derive(Default)]
 pub struct Rtbl(Vec<Route>);
 
 // Dirty longest prefix implementation based on sorting, without even splitting v4/v6 (and just checking in order)
 impl Rtbl {
-    pub fn empty() -> Self {
-        Self(Vec::new())
-    }
     fn new(mut routes: Vec<Route>) -> Rtbl {
         routes.sort_by_key(|r| Reverse(r.bits)); // Normally, you'd also sort by metric, but
         Self(routes)
@@ -117,7 +116,8 @@ pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
                 }
             }
         }
-    })?;
+    })
+    .context("Read routing table")?;
 
     Ok(Rtbl::new(ret))
 }
