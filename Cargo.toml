@@ -12,14 +12,14 @@ readme = "README.md"
 
 [dependencies]
 ansi_term = "0.12.1"
-anyhow = "1.0.69"
+anyhow = "1.0.71"
 itertools = "0.10.5"
 netlink-packet-core = "0.5"
 netlink-packet-route = "0.15"
 netlink-packet-sock-diag = "0.4"
-netlink-sys = "0.8.4"
+netlink-sys = "0.8.5"
 procfs = "0.15.1"
-terminal_size = "0.2.3"
+terminal_size = "0.2.6"
 unicode-width = "0.1.10"
 users = "0.11.0"
 
