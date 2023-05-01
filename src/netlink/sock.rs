@@ -10,10 +10,10 @@ use netlink_packet_sock_diag::{
 use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use std::{collections::HashMap, fmt::Display, net::IpAddr};
 
-pub fn all_sockets(
-    interfaces: &HashMap<u32, String>,
-    local_routes: Rtbl,
-) -> Result<HashMap<Ino, SockInfo>> {
+pub fn all_sockets<'i>(
+    interfaces: &'i HashMap<u32, String>,
+    local_routes: &Rtbl,
+) -> Result<HashMap<Ino, SockInfo<'i>>> {
     let mut socket = Socket::new(NETLINK_SOCK_DIAG)?;
     socket.bind_auto()?;
     socket.connect(&SocketAddr::new(0, 0))?;
@@ -47,7 +47,7 @@ pub fn all_sockets(
                     if response.header.socket_id.destination_port == 0 {
                         ret.insert(
                             response.header.inode.into(),
-                            SockInfo::new(family, protocol, *response, interfaces, &local_routes),
+                            SockInfo::new(family, protocol, *response, interfaces, local_routes),
                         );
                     }
                 }

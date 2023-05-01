@@ -1,8 +1,9 @@
 mod netlink;
 mod procs;
+mod sockets_procfs;
 mod termtree;
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use itertools::Itertools;
 use netlink::sock::{Family, SockInfo};
 use procfs::process::all_processes;
@@ -27,8 +28,21 @@ fn main() -> Result<()> {
     let route_socket = &netlink::route::socket();
     let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
     let local_routes = netlink::route::local_routes(route_socket).unwrap_or_default();
-    let mut socks =
-        netlink::sock::all_sockets(&interfaces, local_routes).context("Get listening sockets")?;
+    let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone
+    let mut socks = match socks {
+        Ok(socks) => socks,
+        Err(netlink_err) => match sockets_procfs::all_sockets(&interfaces, &local_routes) {
+            Ok(socks) => socks,
+            Err(proc_err) => {
+                eprintln!(
+                    "{}",
+                    netlink_err.context("Get listening sockets from netlink")
+                );
+                eprintln!("{}", proc_err.context("Get listening sockets from netlink"));
+                anyhow::bail!("Failed to get socket data");
+            }
+        },
+    };
     let mut output = termtree::Tree::new();
     let self_user_ns = procs::get_user_ns(&procs::ourself()?).ok();
     let mut lps = all_processes()?
