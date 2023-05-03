@@ -31,6 +31,7 @@ pub fn all_sockets<'i>(
         Protocol::UDPlite,
         Protocol::RAW,
         Protocol::SCTP,
+        Protocol::ICMP,
     ];
     let families = [Family::V4, Family::V6];
 
@@ -104,6 +105,7 @@ pub enum Protocol {
     UDPlite,
     RAW,
     SCTP,
+    ICMP,
 }
 impl Protocol {
     fn proto_const(&self) -> u8 {
@@ -113,6 +115,7 @@ impl Protocol {
             Protocol::UDPlite => IPPROTO_UDPLITE,
             Protocol::RAW => IPPROTO_RAW,
             Protocol::SCTP => IPPROTO_SCTP,
+            Protocol::ICMP => IPPROTO_ICMP,
         }
     }
 }
@@ -124,6 +127,7 @@ impl Display for Protocol {
             Protocol::UDPlite => f.write_str("udplite"),
             Protocol::RAW => f.write_str("raw"),
             Protocol::SCTP => f.write_str("sctp"),
+            Protocol::ICMP => f.write_str("icmp"),
         }
     }
 }
