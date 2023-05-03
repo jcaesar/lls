@@ -34,11 +34,13 @@ pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
     Ok(map)
 }
 
-pub fn socket() -> Socket {
-    let mut socket = Socket::new(NETLINK_ROUTE).unwrap();
-    let _port_number = socket.bind_auto().unwrap().port_number();
-    socket.connect(&SocketAddr::new(0, 0)).unwrap();
+pub fn socket() -> Result<Socket> {
+    let mut socket = Socket::new(NETLINK_ROUTE).context("Construct netlink route socket")?;
+    socket.bind_auto().context("Bind netlink route socket")?;
     socket
+        .connect(&SocketAddr::new(0, 0))
+        .context("Connect netlink route socket")?;
+    Ok(socket)
 }
 
 struct Route {

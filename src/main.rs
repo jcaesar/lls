@@ -25,9 +25,7 @@ fn main() -> Result<()> {
     }
 
     let users_cache = UsersCache::new();
-    let route_socket = &netlink::route::socket();
-    let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
-    let local_routes = netlink::route::local_routes(route_socket).unwrap_or_default();
+    let (interfaces, local_routes) = interfaces_routes();
     let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone
     let mut socks = match socks {
         Ok(socks) => socks,
@@ -79,6 +77,13 @@ fn main() -> Result<()> {
     });
 
     Ok(())
+}
+
+fn interfaces_routes() -> (std::collections::HashMap<u32, String>, netlink::route::Rtbl) {
+    let Ok(ref route_socket) = netlink::route::socket() else { return Default::default() };
+    let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
+    let local_routes = netlink::route::local_routes(route_socket).unwrap_or_default();
+    (interfaces, local_routes)
 }
 
 fn sockets_tree<'a>(

@@ -14,9 +14,14 @@ pub fn all_sockets<'i>(
     interfaces: &'i HashMap<u32, String>,
     local_routes: &Rtbl,
 ) -> Result<HashMap<Ino, SockInfo<'i>>> {
-    let mut socket = Socket::new(NETLINK_SOCK_DIAG)?;
-    socket.bind_auto()?;
-    socket.connect(&SocketAddr::new(0, 0))?;
+    let mut socket =
+        Socket::new(NETLINK_SOCK_DIAG).context("Construct netlink socket information socket")?;
+    socket
+        .bind_auto()
+        .context("Bind netlink socket information socket")?;
+    socket
+        .connect(&SocketAddr::new(0, 0))
+        .context("Connect netlink socket information socket")?;
 
     let mut ret = HashMap::new();
 
