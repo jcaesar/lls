@@ -25,3 +25,4 @@ users = "0.11.0"
 
 [profile.release]
 lto = "thin"
+strip = "debuginfo"
