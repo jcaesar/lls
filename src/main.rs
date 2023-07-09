@@ -5,10 +5,13 @@ mod termtree;
 
 use anyhow::{bail, Context, Result};
 use itertools::Itertools;
-use netlink::sock::{Family, SockInfo};
+use netlink::{
+    route::{Prefix, Rtbl},
+    sock::{Family, Protocol, SockInfo},
+};
 use procfs::process::all_processes;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap, HashSet},
     env::{args, var_os},
     io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -19,13 +22,14 @@ use users::UsersCache;
 
 pub type Ino = u64;
 
+#[derive(Debug, Default)]
 struct Filters {
     port: Vec<RangeInclusive<u16>>, // :
     cmd: Vec<String>,               // /
     pid: Vec<i32>,                  // %
     user: Vec<String>,              // ~
-                                    // TODO: tcp/udp/...
-                                    // TODO: prefix...
+    proto: HashSet<Protocol>,       // tcp/udp/...
+    pfxs: Vec<Prefix>,              // prefix or interface name
 }
 impl Filters {
     fn accept_process(&self, pd: &procs::ProcDesc) -> bool {
@@ -33,20 +37,36 @@ impl Filters {
     }
 
     fn accept_pid(&self, pid: i32) -> bool {
-        self.pid.iter().any(|&m| pid == m)
+        self.pid.is_empty() || self.pid.iter().any(|&m| pid == m)
     }
 
     fn accept_cmd(&self, pd: &procs::ProcDesc) -> bool {
         true // TODO
     }
+
+    fn accept_port(&self, port: u16) -> bool {
+        self.port.is_empty() || self.port.iter().any(|r| r.contains(&port))
+    }
+
+    fn accept_proto(&self, proto: Protocol) -> bool {
+        self.proto.is_empty() || self.proto.contains(&proto)
+    }
+
+    fn accept_addr(&self, addr: IpAddr) -> bool {
+        self.pfxs.is_empty()
+            || self.pfxs.iter().any(|pfx| pfx.matches(addr))
+            || addr.is_unspecified()
+    }
 }
 
 fn main() -> Result<()> {
-    let filters = parse_args()?;
-
     let users_cache = UsersCache::new();
     let (interfaces, local_routes) = interfaces_routes();
-    let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone
+
+    let filters = parse_args(&interfaces, &local_routes)?;
+    dbg!(&filters);
+
+    let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone, pass filters
     let mut socks = match socks {
         Ok(socks) => socks,
         Err(netlink_err) => match sockets_procfs::all_sockets(&interfaces, &local_routes) {
@@ -77,7 +97,7 @@ fn main() -> Result<()> {
                 } else {
                     format!("pid {} user {}", pd.pid, pd.user,)
                 },
-                sockets_tree(&pd.sockets),
+                sockets_tree(&pd.sockets, &filters),
             );
         }
     }
@@ -91,7 +111,7 @@ fn main() -> Result<()> {
     match filters.cmd.is_empty() && filters.pid.is_empty() {
         true => {
             for (uid, socks) in socks {
-                output.node(format!("??? (user {uid})",), sockets_tree(socks));
+                output.node(format!("??? (user {uid})",), sockets_tree(socks, &filters));
             }
         }
         false => {
@@ -110,7 +130,11 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn parse_args() -> Result<Filters> {
+fn parse_args(ifaces: &HashMap<u32, String>, local_routes: &Rtbl) -> Result<Filters> {
+    let ifaces = ifaces
+        .iter()
+        .map(|(&id, name)| (name, id))
+        .collect::<HashMap<_, _>>();
     for arg in args() {
         if matches!(
             arg.as_str(),
@@ -120,13 +144,22 @@ fn parse_args() -> Result<Filters> {
             exit(0);
         }
     }
-    let mut filters: Filters = Filters {
-        port: Default::default(),
-        cmd: Default::default(),
-        pid: Default::default(),
-        user: Default::default(),
-    };
+    let mut filters: Filters = Filters::default();
     for arg in args().skip(1) {
+        if let Ok(proto) = arg.parse() {
+            filters.proto.insert(proto);
+            continue;
+        }
+        if let Ok(prefix) = arg.parse() {
+            filters.pfxs.push(prefix);
+            continue;
+        }
+        if let Some(&ifaceid) = ifaces.get(&arg) {
+            for pfx in local_routes.for_iface(ifaceid) {
+                filters.pfxs.push(pfx);
+            }
+            continue;
+        }
         match arg.chars().next() {
             Some('~') => filters.user.push(arg[1..].to_owned()),
             Some('/') => filters.cmd.push(arg[1..].to_owned()),
@@ -188,6 +221,7 @@ fn interfaces_routes() -> (std::collections::HashMap<u32, String>, netlink::rout
 
 fn sockets_tree<'a>(
     sockets: impl IntoIterator<Item = impl Deref<Target = SockInfo<'a>>>,
+    filter: &Filters,
 ) -> termtree::Tree {
     let mut pout = termtree::Tree::new();
     let mut groups = BTreeMap::<_, Vec<_>>::new();
@@ -205,14 +239,18 @@ fn sockets_tree<'a>(
             sout.leaf("0.0.0.0 + ::".into());
         } else {
             for sock in socks {
-                match (sock.family, sock.iface) {
-                    (Family::Both, _) => sout.leaf("*".into()),
-                    (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", sock.addr)),
-                    _ => sout.leaf(format!("{}", sock.addr)),
-                };
+                if filter.accept_addr(sock.addr) {
+                    match (sock.family, sock.iface) {
+                        (Family::Both, _) => sout.leaf("*".into()),
+                        (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", sock.addr)),
+                        _ => sout.leaf(format!("{}", sock.addr)),
+                    };
+                }
             }
         }
-        pout.node(format!(":{port} {proto}"), sout);
+        if filter.accept_port(port) && filter.accept_proto(proto) {
+            pout.node(format!(":{port} {proto}"), sout);
+        }
     }
     pout
 }

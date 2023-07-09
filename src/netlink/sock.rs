@@ -97,7 +97,7 @@ impl Display for Family {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[allow(clippy::upper_case_acronyms)]
 pub enum Protocol {
     TCP,
@@ -118,6 +118,10 @@ impl Protocol {
             Protocol::ICMP => IPPROTO_ICMP,
         }
     }
+    const fn all() -> &'static [Protocol; 6] {
+        use Protocol::*;
+        &[TCP, UDP, UDPlite, RAW, SCTP, ICMP]
+    }
 }
 impl Display for Protocol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -129,6 +133,19 @@ impl Display for Protocol {
             Protocol::SCTP => f.write_str("sctp"),
             Protocol::ICMP => f.write_str("icmp"),
         }
+    }
+}
+impl std::str::FromStr for Protocol {
+    type Err = ();
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        let s = s.to_ascii_lowercase();
+        for &proto in Self::all() {
+            if s == format!("{}", proto) {
+                return Ok(proto);
+            }
+        }
+        return Err(());
     }
 }
 

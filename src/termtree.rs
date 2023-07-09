@@ -17,7 +17,9 @@ impl Tree {
         self
     }
     pub fn node(&mut self, data: String, children: Tree) -> &mut Self {
-        self.0.push(Entry { data, children });
+        if !children.0.is_empty() {
+            self.0.push(Entry { data, children });
+        }
         self
     }
     pub fn new() -> Self {
