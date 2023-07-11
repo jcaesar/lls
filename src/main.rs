@@ -41,7 +41,13 @@ impl Filters {
     }
 
     fn accept_cmd(&self, pd: &procs::ProcDesc) -> bool {
-        true // TODO
+        pd.name.as_ref().map_or(true, |name| {
+            self.cmd.is_empty()
+                || self
+                    .cmd
+                    .iter()
+                    .any(|cmd| name.to_lowercase().contains(&cmd.to_lowercase()))
+        })
     }
 
     fn accept_port(&self, port: u16) -> bool {
@@ -64,7 +70,6 @@ fn main() -> Result<()> {
     let (interfaces, local_routes) = interfaces_routes();
 
     let filters = parse_args(&interfaces, &local_routes)?;
-    dbg!(&filters);
 
     let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone, pass filters
     let mut socks = match socks {
