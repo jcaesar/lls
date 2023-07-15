@@ -292,7 +292,7 @@ checksum = "b64f40e5e03e0d54f03845c8197d0291253cdbedfb1cb46b13c2c117554a9f4c"
 
 [[package]]
 name = "lls"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "ansi_term",
  "anyhow",

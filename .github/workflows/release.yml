@@ -24,14 +24,14 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.62.0
+          toolchain: 1.70.0
           override: true
           target: ${{ matrix.job.target }}
           components: rust-src
       - uses: actions-rs/cargo@v1
         with:
           use-cross: true
-          args: --release --target=${{ matrix.job.target }} --locked
+          args: --profile minsize --target=${{ matrix.job.target }} --locked
           command: build
       - name: Rename result
         run: |

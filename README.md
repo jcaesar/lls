@@ -38,7 +38,7 @@ avahi-daemon (pid 655 user avahi)
  * The listening address isn't helpful with v6 addresses.
 
 `lls` aims to do better:
- * No command line parameters
+ * No command line parameters necessary
  * Compact output (but hopefully not an eyesore)
  * Grouping sockets by process and port
  * Conservative command line parsing to show script names for interpreters
