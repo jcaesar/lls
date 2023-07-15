@@ -14,6 +14,7 @@ pub type Pid = i32;
 pub struct ProcDesc<'a> {
     pub pid: Pid,
     pub user: String,
+    pub uid: u32,
     pub name: Option<String>,
     pub sockets: Vec<SockInfo<'a>>,
 }
@@ -53,6 +54,7 @@ impl<'a> ProcDesc<'a> {
             name,
             sockets,
             user,
+            uid: p.uid()?,
         })
     }
 }

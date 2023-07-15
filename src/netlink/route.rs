@@ -72,7 +72,7 @@ impl std::fmt::Display for Prefix {
 }
 
 impl std::str::FromStr for Prefix {
-    type Err = ();
+    type Err = anyhow::Error;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
         let mut s = s.splitn(2, '/');
@@ -80,9 +80,9 @@ impl std::str::FromStr for Prefix {
             .next()
             .expect("Split iterator should return at least one element")
             .parse()
-            .map_err(|_| ())?;
+            .context("Parse IP address")?;
         let bits = match s.next() {
-            Some(bits) => bits.parse().map_err(|_| ())?,
+            Some(bits) => bits.parse().context("Parse mask")?,
             None => match dst {
                 IpAddr::V4(_) => 32,
                 IpAddr::V6(_) => 128,

@@ -18,7 +18,7 @@ use std::{
     ops::{Deref, RangeInclusive},
     process::exit,
 };
-use users::UsersCache;
+use users::{Users, UsersCache};
 
 pub type Ino = u64;
 
@@ -27,17 +27,21 @@ struct Filters {
     port: Vec<RangeInclusive<u16>>, // :
     cmd: Vec<String>,               // /
     pid: Vec<i32>,                  // %
-    user: Vec<String>,              // ~
     proto: HashSet<Protocol>,       // tcp/udp/...
     pfxs: Vec<Prefix>,              // prefix or interface name
+    user: Vec<u32>,
 }
 impl Filters {
     fn accept_process(&self, pd: &procs::ProcDesc) -> bool {
-        self.accept_pid(pd.pid) && self.accept_cmd(pd)
+        self.accept_pid(pd.pid) && self.accept_cmd(pd) && self.accept_user(pd.uid)
     }
 
     fn accept_pid(&self, pid: i32) -> bool {
-        self.pid.is_empty() || self.pid.iter().any(|&m| pid == m)
+        self.pid.is_empty() || self.pid.contains(&pid)
+    }
+
+    fn accept_user(&self, uid: u32) -> bool {
+        self.user.is_empty() || self.user.contains(&uid)
     }
 
     fn accept_cmd(&self, pd: &procs::ProcDesc) -> bool {
@@ -69,7 +73,7 @@ fn main() -> Result<()> {
     let users_cache = UsersCache::new();
     let (interfaces, local_routes) = interfaces_routes();
 
-    let filters = parse_args(&interfaces, &local_routes)?;
+    let filters = parse_args(&interfaces, &local_routes, &users_cache)?;
 
     let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone, pass filters
     let mut socks = match socks {
@@ -116,7 +120,9 @@ fn main() -> Result<()> {
     match filters.cmd.is_empty() && filters.pid.is_empty() {
         true => {
             for (uid, socks) in socks {
-                output.node(format!("??? (user {uid})",), sockets_tree(socks, &filters));
+                if filters.accept_user(uid) {
+                    output.node(format!("??? (user {uid})",), sockets_tree(socks, &filters));
+                }
             }
         }
         false => {
@@ -135,7 +141,50 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn parse_args(ifaces: &HashMap<u32, String>, local_routes: &Rtbl) -> Result<Filters> {
+struct Arg(Option<char>, char, &'static [&'static str]);
+static ARGS: [Arg; 6] = [
+    Arg(None, 'a', &["addr", "address", "prefix"]),
+    Arg(Some(':'), 'p', &["port"]),
+    Arg(Some('%'), 'P', &["pid", "process-id"]),
+    Arg(Some('/'), 'c', &["cmd", "command"]),
+    Arg(None, 'u', &["user"]),
+    Arg(None, 'i', &["iface", "interface"]),
+];
+
+fn match_arg(arg: &str, args: &mut std::env::Args) -> Result<Option<(char, String)>> {
+    for m in &ARGS {
+        if let Some(abbrev) = m.0 {
+            if let Some(arg) = arg.strip_prefix(abbrev).filter(|s| !s.is_empty()) {
+                return Ok(Some((m.1, arg.into())));
+            }
+        }
+        for (pfx, name) in
+            std::iter::once(("-", m.1.to_string().as_str())).chain(m.2.iter().map(|&s| ("--", s)))
+        {
+            let f = format!("{pfx}{name}");
+            if arg == f {
+                return Ok(Some((
+                    m.1,
+                    args.next()
+                        .with_context(|| format!("Argument to {f} is missing"))?,
+                )));
+            }
+            if let Some(arg) = arg.strip_prefix(&format!("{f}=")) {
+                return Ok(Some((m.1, arg.into())));
+            }
+            if let Some(arg) = arg.strip_prefix(&f) {
+                return Ok(Some((m.1, arg.into())));
+            }
+        }
+    }
+    Ok(None)
+}
+
+fn parse_args(
+    ifaces: &HashMap<u32, String>,
+    local_routes: &Rtbl,
+    users: &UsersCache,
+) -> Result<Filters> {
     let ifaces = ifaces
         .iter()
         .map(|(&id, name)| (name, id))
@@ -150,31 +199,30 @@ fn parse_args(ifaces: &HashMap<u32, String>, local_routes: &Rtbl) -> Result<Filt
         }
     }
     let mut filters: Filters = Filters::default();
-    for arg in args().skip(1) {
-        if let Ok(proto) = arg.parse() {
-            filters.proto.insert(proto);
-            continue;
-        }
-        if let Ok(prefix) = arg.parse() {
-            filters.pfxs.push(prefix);
-            continue;
-        }
-        if let Some(&ifaceid) = ifaces.get(&arg) {
-            for pfx in local_routes.for_iface(ifaceid) {
-                filters.pfxs.push(pfx);
-            }
-            continue;
-        }
-        match arg.chars().next() {
-            Some('~') => filters.user.push(arg[1..].to_owned()),
-            Some('/') => filters.cmd.push(arg[1..].to_owned()),
-            Some('%') => filters.pid.push(
-                arg[1..]
-                    .parse()
-                    .with_context(|| format!("Unable to parse pid filter {:?}", &arg[1..]))?,
+    let mut args = args();
+    args.next().expect("Arg 0 missing");
+    while let Some(arg) = args.next() {
+        let normal_match = match_arg(&arg, &mut args)?;
+        match normal_match {
+            Some(('c', arg)) => filters.cmd.push(arg.to_owned()),
+            Some(('P', arg)) => filters.pid.push(
+                arg.parse()
+                    .with_context(|| format!("Unable to parse pid filter {:?}", &arg))?,
             ),
-            Some(':') => {
-                let mut split = arg[1..].splitn(2, '-');
+            Some(('u', arg)) => {
+                if let Some(user) = users.get_user_by_name(&arg) {
+                    filters.user.push(user.uid())
+                } else if let Ok(uid) = arg.parse() {
+                    if users.get_user_by_uid(uid).is_none() {
+                        eprintln!("WARNING: Unknown user id: {uid}");
+                    }
+                    filters.user.push(uid);
+                } else {
+                    bail!("Unknown user {arg}");
+                }
+            }
+            Some(('p', arg)) => {
+                let mut split = arg.splitn(2, '-');
                 let start_port = split
                     .next()
                     .expect("Split iterator should always return at least one element");
@@ -187,16 +235,12 @@ fn parse_args(ifaces: &HashMap<u32, String>, local_routes: &Rtbl) -> Result<Filt
                             false => "",
                         },
                         start_port,
-                        &arg[1..],
+                        &arg,
                     )
                 })?;
                 let end_port = match end_port {
                     Some(end_port) => end_port.parse().with_context(|| {
-                        format!(
-                            "Parse port range end {:?} of range {:?}",
-                            end_port,
-                            &arg[1..]
-                        )
+                        format!("Parse port range end {:?} of range {:?}", end_port, &arg)
                     })?,
                     None => start_port,
                 };
@@ -206,11 +250,42 @@ fn parse_args(ifaces: &HashMap<u32, String>, local_routes: &Rtbl) -> Result<Filt
                     false => end_port..=start_port,
                 });
             }
-            Some(c) => {
-                bail!("Unknown filter type {}. See --help", c);
+            Some(('i', arg)) => {
+                if let Some(&ifaceid) = ifaces.get(&arg) {
+                    for pfx in local_routes.for_iface(ifaceid) {
+                        filters.pfxs.push(pfx);
+                    }
+                    continue;
+                } else {
+                    bail!("Unknown interface {arg}");
+                }
+            }
+            Some(('a', arg)) => filters.pfxs.push(
+                arg.parse()
+                    .with_context(|| format!("Can't parse {arg:?} as prefix"))?,
+            ),
+            Some((c, _)) => {
+                unreachable!("Argument parser bug - {c}");
             }
             None => {
-                bail!("Empty argument");
+                if matches!(arg.as_str(), "-s" | "--self") {
+                    let uids = [users::get_current_uid(), users::get_effective_uid()];
+                    filters.user.extend_from_slice(&uids);
+                } else if let Some(Ok(proto)) = arg.strip_prefix("--").map(str::parse) {
+                    filters.proto.insert(proto);
+                } else if let Ok(proto) = arg.parse() {
+                    filters.proto.insert(proto);
+                } else if let Ok(prefix) = arg.parse() {
+                    filters.pfxs.push(prefix);
+                } else if let Some(&ifaceid) = ifaces.get(&arg) {
+                    for pfx in local_routes.for_iface(ifaceid) {
+                        filters.pfxs.push(pfx);
+                    }
+                } else if let Some(user) = users.get_user_by_name(&arg) {
+                    filters.user.push(user.uid())
+                } else {
+                    bail!("Unknown argument: {arg:?}");
+                }
             }
         }
     }
