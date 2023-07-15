@@ -2,10 +2,42 @@ lls - list listening sockets / listening ls
 Julius Michaelis <lls@liftm.de>
 
 USAGE:
-    lls
-    lls has no command-line options
+
+    lls [options]
+
+    Example: lls :8080 tcp
+
+OPTIONS:
+
+    :, -p, --port <port>  Only show sockets with matching listening port.
+                          Can be a range. Examples: :8080, --port=1336-1338
+
+    -a, --addr <prefix>   Only show sockets reachable from the specified address or range.
+                          Examples: 192.168.0.1, -a 127.0.0.0/8
+                          Any plain argument that parses as an IP prefix is accepted,
+                          i.e. -a/--addr can be omitted.
+
+    -u, --user <user>     Only show listening sockets owned by specified user (id or name).
+    -s, --self            Only show listening sockets owned by current user.
+
+    -i, --iface <iface>   Only show sockets listening on addresses of the specified interface
+                          Examples: eth0, --iface enp42s0
+                          Any plain argument that is a known interface name is accepted,
+                          i.e. -i/--iface can be omitted.
+
+    %, -P, --pid <pid>    Only show sockets known to belong to a process with this id.
+                          Matching processes may not be found for all sockets,
+                          for example when running as non-root.
+
+    /, -c --cmd           Only show sockets known to belong to a process with this command name.
+                          Note that this is based on a heuristic for "script" engines
+                          like python and java and may not always be what you expect.
+
+    --tcp, --udp, ...     Only show listening sockets with matching protocol.
+                          The leading -- may be omitted.
 
 OUTPUT:
+
     lls outputs a tree of listening sockets, grouped by process and port, e.g.:
     
     sshd (pid 137 user root)
