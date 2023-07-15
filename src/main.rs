@@ -45,13 +45,25 @@ impl Filters {
     }
 
     fn accept_cmd(&self, pd: &procs::ProcDesc) -> bool {
-        pd.name.as_ref().map_or(true, |name| {
-            self.cmd.is_empty()
-                || self
-                    .cmd
-                    .iter()
-                    .any(|cmd| name.to_lowercase().contains(&cmd.to_lowercase()))
-        })
+        self.cmd.is_empty()
+            || self.cmd.iter().any(|cmd| {
+                let cmd = cmd.to_lowercase();
+                let check = |x: &str| x.to_lowercase().contains(&cmd);
+                let check_option = |x: &Option<String>| x.as_deref().is_some_and(check);
+                check_option(&pd.name)
+                    || check_option(&pd.info.name)
+                    || check_option(&pd.info.comm)
+                    || pd
+                        .info
+                        .exe
+                        .as_deref()
+                        .is_some_and(|s| check(&s.to_string_lossy()))
+                    || pd
+                        .info
+                        .cmdline
+                        .as_ref()
+                        .is_some_and(|cmdline| cmdline.iter().any(|s| check(s)))
+            })
     }
 
     fn accept_port(&self, port: u16) -> bool {

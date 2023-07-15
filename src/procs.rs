@@ -16,14 +16,16 @@ pub struct ProcDesc<'a> {
     pub user: String,
     pub uid: u32,
     pub name: Option<String>,
+    pub info: ProcNamePre,
     pub sockets: Vec<SockInfo<'a>>,
 }
 
-struct ProcNamePre {
-    name: Option<String>,
-    comm: Option<String>,
-    exe: Option<PathBuf>,
-    cmdline: Option<Vec<String>>,
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProcNamePre {
+    pub name: Option<String>,
+    pub comm: Option<String>,
+    pub exe: Option<PathBuf>,
+    pub cmdline: Option<Vec<String>>,
 }
 
 impl<'a> ProcDesc<'a> {
@@ -34,7 +36,7 @@ impl<'a> ProcDesc<'a> {
         self_user_ns: Option<u64>,
     ) -> Result<ProcDesc<'a>> {
         let p = p?;
-        let name = ps_name(&p);
+        let (name, info) = ps_name(&p);
         let user = user_names
             .get_user_by_uid(p.uid()?)
             .filter(|_| get_user_ns(&p).ok() == self_user_ns)
@@ -54,12 +56,13 @@ impl<'a> ProcDesc<'a> {
             name,
             sockets,
             user,
+            info,
             uid: p.uid()?,
         })
     }
 }
 
-fn ps_name(p: &Process) -> Option<String> {
+fn ps_name(p: &Process) -> (Option<String>, ProcNamePre) {
     let comm = p.stat().ok().map(|s| remove_paren(s.comm));
     let exe = p.exe().ok();
     let cmdline = p.cmdline().ok();
@@ -78,7 +81,7 @@ fn ps_name(p: &Process) -> Option<String> {
         cmdline,
         name,
     };
-    if let py @ Some(_) = py_ps_name(&proc_name_pre) {
+    let name = if let py @ Some(_) = py_ps_name(&proc_name_pre) {
         py
     } else if let lua @ Some(_) = lua_ps_name(&proc_name_pre) {
         lua
@@ -87,8 +90,9 @@ fn ps_name(p: &Process) -> Option<String> {
     } else if let node @ Some(_) = node_ps_name(&proc_name_pre) {
         node
     } else {
-        proc_name_pre.name
-    }
+        proc_name_pre.name.clone()
+    };
+    (name, proc_name_pre)
 }
 
 fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {

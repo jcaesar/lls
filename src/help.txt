@@ -30,8 +30,6 @@ OPTIONS:
                           for example when running as non-root.
 
     /, -c --cmd           Only show sockets known to belong to a process with this command name.
-                          Note that this is based on a heuristic for "script" engines
-                          like python and java and may not always be what you expect.
 
     --tcp, --udp, ...     Only show listening sockets with matching protocol.
                           The leading -- may be omitted.
