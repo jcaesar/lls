@@ -1,7 +1,7 @@
 [package]
 name = "lls"
 description = "list listening sockets"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = ["Julius Michaelis <gitter@liftm.de>"]
 repository = "https://github.com/jcaesar/lls"
@@ -11,17 +11,17 @@ keywords = ["listening", "socket", "linux", "cli"]
 readme = "README.md"
 
 [dependencies]
-ansi_term = "0.12.1"
-anyhow = "1.0.71"
+anstyle = "1.0.4"
+anyhow = "1.0.75"
 itertools = "0.10.5"
-netlink-packet-core = "0.5"
-netlink-packet-route = "0.15"
-netlink-packet-sock-diag = "0.4"
-netlink-sys = "0.8.5"
+netlink-packet-core = "=0.7.0"
+netlink-packet-route = "=0.17.1"
+netlink-packet-sock-diag = "=0.4.2"
+netlink-sys = "=0.8.5"
 procfs = "0.15.1"
 terminal_size = "0.2.6"
-unicode-width = "0.1.10"
-users = "0.11.0"
+unicode-width = "0.1.11"
+uzers = { version = "0.11.3", default-features = false, features = ["cache"] }
 
 [profile.release]
 lto = "thin"

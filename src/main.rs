@@ -15,7 +15,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
 };
-use users::UsersCache;
+use uzers::UsersCache;
 
 pub type Ino = u64;
 

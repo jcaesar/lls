@@ -6,7 +6,7 @@ use std::{
     collections::HashMap, ffi::OsString, ops::ControlFlow, os::unix::prelude::OsStringExt,
     path::PathBuf,
 };
-use users::{Users, UsersCache};
+use uzers::{Users, UsersCache};
 
 pub type Pid = i32;
 

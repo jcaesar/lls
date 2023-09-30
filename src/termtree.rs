@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
-const GREY: ansi_term::Colour = ansi_term::Colour::Fixed(244);
+const GREY: anstyle::Style = anstyle::Color::Ansi(anstyle::AnsiColor::BrightBlack).on_default();
 
 pub struct Tree(Vec<Entry>);
 pub struct Entry {
@@ -60,7 +60,7 @@ fn render_entry(
     if color {
         let mut out = String::new();
         render_pfx(prefix, true, &mut |s| out.push_str(s));
-        ret(format!("{}", GREY.paint(out)).as_bytes());
+        ret(format!("{}{}{}", GREY.render(), out, GREY.render_reset()).as_bytes());
     } else {
         render_pfx(prefix, true, &mut |s| ret(s.as_bytes()));
     }
@@ -104,7 +104,7 @@ fn render_entry(
 
 fn collapse(children: &[Entry], mw: Option<usize>, color: bool) -> Option<String> {
     let sep = if color {
-        format!("{}", GREY.paint(" / "))
+        format!("{} / {}", GREY.render(), GREY.render_reset())
     } else {
         " / ".into()
     };

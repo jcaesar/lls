@@ -12,8 +12,8 @@ use std::env::args;
 use std::net::IpAddr;
 use std::ops::RangeInclusive;
 use std::process::exit;
-use users::Users;
-use users::UsersCache;
+use uzers::Users;
+use uzers::UsersCache;
 
 struct Arg(Option<char>, char, &'static [&'static str]);
 static ARGS: [Arg; 6] = [
@@ -203,7 +203,7 @@ pub fn parse_args(
             }
             None => {
                 if matches!(arg.as_str(), "-s" | "--self") {
-                    let uids = [users::get_current_uid(), users::get_effective_uid()];
+                    let uids = [uzers::get_current_uid(), uzers::get_effective_uid()];
                     filters.user.extend_from_slice(&uids);
                 } else if let Some(Ok(proto)) = arg.strip_prefix("--").map(str::parse) {
                     filters.proto.insert(proto);

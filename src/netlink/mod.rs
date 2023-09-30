@@ -30,7 +30,7 @@ where
             let bytes = &receive_buffer[offset..];
             let rx_packet: NetlinkMessage<T> = NetlinkMessage::deserialize(bytes).unwrap();
             match rx_packet.payload {
-                NetlinkPayload::Done => return Ok(()),
+                NetlinkPayload::Done(_) => return Ok(()),
                 NetlinkPayload::InnerMessage(inner) => recv(inner),
                 NetlinkPayload::Error(err) => return Err(err.to_io()).context("Netlink error"),
                 p => todo!("Unexpected netlink payload {:?}", p.message_type()),
