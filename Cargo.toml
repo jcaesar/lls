@@ -11,17 +11,17 @@ keywords = ["listening", "socket", "linux", "cli"]
 readme = "README.md"
 
 [dependencies]
-anstyle = "1.0.4"
-anyhow = "1.0.75"
-itertools = "0.10.5"
+anstyle = "1.0.8"
+anyhow = "1.0.86"
+itertools = "0.13.0"
 netlink-packet-core = "=0.7.0"
 netlink-packet-route = "=0.17.1"
 netlink-packet-sock-diag = "=0.4.2"
 netlink-sys = "=0.8.5"
-procfs = "0.15.1"
-terminal_size = "0.2.6"
-unicode-width = "0.1.11"
-uzers = { version = "0.11.3", default-features = false, features = ["cache"] }
+procfs = "0.16.0"
+terminal_size = "0.3.0"
+unicode-width = "0.1.13"
+uzers = { version = "0.12.1", default-features = false, features = ["cache"] }
 
 [profile.release]
 lto = "thin"
