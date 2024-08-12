@@ -1,7 +1,7 @@
 use crate::netlink::route::Prefix;
-use crate::netlink::route::Rtbl;
 use crate::netlink::sock::Protocol;
 use crate::procs;
+use crate::IfaceInfo;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
@@ -83,6 +83,10 @@ impl Filters {
             || self.pfxs.iter().any(|pfx| pfx.matches(addr))
             || addr.is_unspecified()
     }
+
+    pub(crate) fn accept_wg(&self) -> bool {
+        self.cmd.is_empty() && self.pid.is_empty()
+    }
 }
 
 pub fn match_arg(arg: &str, args: &mut std::env::Args) -> Result<Option<(char, String)>> {
@@ -115,8 +119,11 @@ pub fn match_arg(arg: &str, args: &mut std::env::Args) -> Result<Option<(char, S
 }
 
 pub fn parse_args(
-    ifaces: &HashMap<u32, String>,
-    local_routes: &Rtbl,
+    IfaceInfo {
+        id2name: ifaces,
+        local_routes,
+        ..
+    }: &IfaceInfo,
     users: &UsersCache,
 ) -> Result<Filters> {
     let ifaces = ifaces

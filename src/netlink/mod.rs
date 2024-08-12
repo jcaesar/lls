@@ -1,5 +1,6 @@
 pub mod route;
 pub mod sock;
+pub mod wg;
 
 use anyhow::{Context, Result};
 use netlink_packet_core::{
@@ -32,7 +33,10 @@ where
             match rx_packet.payload {
                 NetlinkPayload::Done(_) => return Ok(()),
                 NetlinkPayload::InnerMessage(inner) => recv(inner),
-                NetlinkPayload::Error(err) => return Err(err.to_io()).context("Netlink error"),
+                NetlinkPayload::Error(err) => match err.code {
+                    Some(_) => return Err(err.to_io()).context("Netlink error"),
+                    None => return Ok(()),
+                },
                 p => todo!("Unexpected netlink payload {:?}", p.message_type()),
             }
 

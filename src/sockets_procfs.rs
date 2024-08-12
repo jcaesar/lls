@@ -1,14 +1,17 @@
 use super::Ino;
-use crate::netlink::{
-    route::Rtbl,
-    sock::{Family, Protocol, SockInfo},
+use crate::{
+    netlink::sock::{Family, Protocol, SockInfo},
+    IfaceInfo,
 };
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 
 pub fn all_sockets<'i>(
-    interfaces: &'i HashMap<u32, String>,
-    local_routes: &Rtbl,
+    IfaceInfo {
+        id2name: interfaces,
+        local_routes,
+        ..
+    }: &'i IfaceInfo,
 ) -> Result<HashMap<Ino, SockInfo<'i>>> {
     eprintln!("WARNING: Falling back to parsing info from procfs, limited to TCP and UDP");
     let mut ret = HashMap::new();

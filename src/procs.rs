@@ -351,7 +351,8 @@ impl Ord for ProcDesc<'_> {
 pub fn get_user_ns(p: &Process) -> Result<u64> {
     Ok(p.namespaces()
         .context("Namespaces inaccessible")?
-        .0.get(&OsString::from_vec(b"user".to_vec()))
+        .0
+        .get(&OsString::from_vec(b"user".to_vec()))
         .context("No user ns")?
         .identifier)
 }

@@ -209,8 +209,10 @@ dependencies = [
  "anyhow",
  "itertools",
  "netlink-packet-core",
+ "netlink-packet-generic",
  "netlink-packet-route",
  "netlink-packet-sock-diag",
+ "netlink-packet-wireguard",
  "netlink-sys",
  "procfs",
  "terminal_size",
@@ -241,6 +243,18 @@ checksum = "72724faf704479d67b388da142b186f916188505e7e0b26719019c525882eda4"
 dependencies = [
  "anyhow",
  "byteorder",
+ "netlink-packet-utils",
+]
+
+[[package]]
+name = "netlink-packet-generic"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cd7eb8ad331c84c6b8cb7f685b448133e5ad82e1ffd5acafac374af4a5a308b"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "netlink-packet-core",
  "netlink-packet-utils",
 ]
 
@@ -283,6 +297,20 @@ dependencies = [
  "byteorder",
  "paste",
  "thiserror",
+]
+
+[[package]]
+name = "netlink-packet-wireguard"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "60b25b050ff1f6a1e23c6777b72db22790fe5b6b5ccfd3858672587a79876c8f"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "libc",
+ "log",
+ "netlink-packet-generic",
+ "netlink-packet-utils",
 ]
 
 [[package]]

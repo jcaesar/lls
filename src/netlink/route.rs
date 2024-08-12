@@ -4,13 +4,22 @@ use netlink_packet_core::{
     NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
 };
 use netlink_packet_route::{
-    constants::*, link::nlas::Nla as LinkNla, route::nlas::Nla as RouteNla, LinkMessage,
-    RouteMessage, RtnlMessage,
+    constants::*,
+    link::nlas::Nla as LinkNla,
+    nlas::link::{Info, InfoKind},
+    route::nlas::Nla as RouteNla,
+    LinkMessage, RouteMessage, RtnlMessage,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, Socket, SocketAddr};
 use std::{cmp::Reverse, collections::HashMap, net::IpAddr};
 
-pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
+#[derive(Default)]
+pub struct Interfaces {
+    pub id2name: HashMap<u32, String>,
+    pub wireguard_ids: Vec<u32>,
+}
+
+pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
     let mut packet = NetlinkMessage::new(
         NetlinkHeader::default(),
         NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
@@ -19,19 +28,32 @@ pub fn interface_names(socket: &Socket) -> Result<HashMap<u32, String>> {
     packet.header.sequence_number = 1;
 
     let mut map = HashMap::new();
+    let mut wg_ids = Vec::new();
     drive_req(packet, socket, |inner| {
         if let RtnlMessage::NewLink(nl) = inner {
-            if let Some(name) = nl.nlas.into_iter().find_map(|s| match s {
-                LinkNla::IfName(n) => Some(n),
-                _ => None,
-            }) {
-                map.insert(nl.header.index, name);
+            for nla in nl.nlas {
+                match nla {
+                    LinkNla::IfName(name) => {
+                        map.insert(nl.header.index, name);
+                    }
+                    LinkNla::Info(infos) => {
+                        for info in infos {
+                            if info == Info::Kind(InfoKind::Wireguard) {
+                                wg_ids.push(nl.header.index);
+                            }
+                        }
+                    }
+                    _ => (),
+                }
             }
         }
     })
     .context("Get interface names")?;
 
-    Ok(map)
+    Ok(Interfaces {
+        id2name: map,
+        wireguard_ids: wg_ids,
+    })
 }
 
 pub fn socket() -> Result<Socket> {

@@ -91,10 +91,7 @@ fn render_entry(
     ret(b"\n");
     if collapsed.is_none() {
         for (pos, child) in tree.children.0.iter().with_position() {
-            let last = matches!(
-                pos,
-                itertools::Position::Last | itertools::Position::Only
-            );
+            let last = matches!(pos, itertools::Position::Last | itertools::Position::Only);
             let prefix = Prefix { last, prefix };
             render_entry(child, mw, color, ret, Some(&prefix));
         }

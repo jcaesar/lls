@@ -6,10 +6,13 @@ mod termtree;
 
 use anyhow::Result;
 use itertools::Itertools;
-use netlink::sock::{Family, SockInfo};
+use netlink::{
+    sock::{Family, SockInfo},
+    wg::wireguards,
+};
 use procfs::process::all_processes;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     env::var_os,
     io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -21,14 +24,14 @@ pub type Ino = u64;
 
 fn main() -> Result<()> {
     let users_cache = UsersCache::new();
-    let (interfaces, local_routes) = interfaces_routes();
+    let iface_info = interfaces_routes();
 
-    let filters = options::parse_args(&interfaces, &local_routes, &users_cache)?;
+    let filters = options::parse_args(&iface_info, &users_cache)?;
 
-    let socks = netlink::sock::all_sockets(&interfaces, &local_routes); // TODO no clone, pass filters
+    let socks = netlink::sock::all_sockets(&iface_info); // TODO no clone, pass filters
     let mut socks = match socks {
         Ok(socks) => socks,
-        Err(netlink_err) => match sockets_procfs::all_sockets(&interfaces, &local_routes) {
+        Err(netlink_err) => match sockets_procfs::all_sockets(&iface_info) {
             Ok(socks) => socks,
             Err(proc_err) => {
                 eprintln!(
@@ -42,6 +45,8 @@ fn main() -> Result<()> {
     };
     let mut output = termtree::Tree::new();
     let self_user_ns = procs::get_user_ns(&procs::ourself()?).ok();
+
+    // output known processes/sockets
     let mut lps = all_processes()?
         .filter_map(|p| procs::ProcDesc::inspect_ps(p, &mut socks, &users_cache, self_user_ns).ok())
         .filter(|p| !p.sockets.is_empty())
@@ -60,6 +65,31 @@ fn main() -> Result<()> {
             );
         }
     }
+
+    // output wireguards
+    let mut wireguard_sockets = HashMap::<_, Vec<_>>::new();
+    socks.retain(|_sockid, sockinfo| {
+        if let Some(if_id) = iface_info.wireguard_ports.get(&sockinfo.port) {
+            wireguard_sockets
+                .entry(if_id)
+                .or_default()
+                .push(sockinfo.to_owned());
+            false
+        } else {
+            true
+        }
+    });
+    for (if_id, socks) in &wireguard_sockets {
+        if filters.accept_wg() {
+            let name = match iface_info.id2name.get(if_id) {
+                Some(ifname) => format!("[wireguard {ifname}]"),
+                None => format!("wireguard, index {if_id}"),
+            };
+            output.node(name, sockets_tree(socks, &filters));
+        }
+    }
+
+    // output unknown sockets
     let mut socks = socks
         .values()
         .into_group_map_by(|s| s.uid)
@@ -76,8 +106,10 @@ fn main() -> Result<()> {
             }
         }
         false => {
-            eprintln!("WARNING: Some listening sockets hidden:");
-            eprintln!("Not all sockets could not be matched to a process, process-based filtering not fully possible.");
+            if !socks.is_empty() {
+                eprintln!("WARNING: Some listening sockets hidden:");
+                eprintln!("Not all sockets could not be matched to a process, process-based filtering not fully possible.");
+            }
         }
     }
 
@@ -91,13 +123,28 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn interfaces_routes() -> (std::collections::HashMap<u32, String>, netlink::route::Rtbl) {
+#[derive(Default)]
+struct IfaceInfo {
+    id2name: HashMap<u32, String>,
+    wireguard_ports: HashMap<u16, u32>,
+    local_routes: netlink::route::Rtbl,
+}
+
+fn interfaces_routes() -> IfaceInfo {
     let Ok(ref route_socket) = netlink::route::socket() else {
         return Default::default();
     };
-    let interfaces = netlink::route::interface_names(route_socket).unwrap_or_default();
+    let netlink::route::Interfaces {
+        id2name,
+        wireguard_ids,
+    } = netlink::route::interface_names(route_socket).unwrap_or_default();
     let local_routes = netlink::route::local_routes(route_socket).unwrap_or_default();
-    (interfaces, local_routes)
+    let wireguard_ports = wireguards(&wireguard_ids).unwrap_or_default();
+    IfaceInfo {
+        id2name,
+        wireguard_ports,
+        local_routes,
+    }
 }
 
 fn sockets_tree<'a>(

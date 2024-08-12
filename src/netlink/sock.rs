@@ -1,5 +1,5 @@
 use super::{drive_req, nl_hdr_flags, route::Rtbl};
-use crate::Ino;
+use crate::{IfaceInfo, Ino};
 use anyhow::{Context, Result};
 use netlink_packet_core::{NetlinkMessage, NLM_F_DUMP, NLM_F_REQUEST};
 use netlink_packet_sock_diag::{
@@ -11,8 +11,11 @@ use netlink_sys::{protocols::NETLINK_SOCK_DIAG, Socket, SocketAddr};
 use std::{collections::HashMap, fmt::Display, net::IpAddr};
 
 pub fn all_sockets<'i>(
-    interfaces: &'i HashMap<u32, String>,
-    local_routes: &Rtbl,
+    IfaceInfo {
+        id2name: interfaces,
+        local_routes,
+        ..
+    }: &'i IfaceInfo,
 ) -> Result<HashMap<Ino, SockInfo<'i>>> {
     let mut socket =
         Socket::new(NETLINK_SOCK_DIAG).context("Construct netlink socket information socket")?;
@@ -149,7 +152,7 @@ impl std::str::FromStr for Protocol {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SockInfo<'a> {
     pub family: Family,
     pub protocol: Protocol,
