@@ -21,15 +21,18 @@ where
     let mut buf = vec![0; packet.header.length as usize];
     assert!(buf.len() == packet.buffer_len());
     packet.serialize(&mut buf[..]);
-    socket.send(&buf[..], 0).unwrap();
+    socket.send(&buf[..], 0).context("Netlink send error")?;
     let mut receive_buffer = vec![0; 4096];
     let mut offset = 0;
     loop {
-        let size = socket.recv(&mut &mut receive_buffer[..], 0).unwrap();
+        let size = socket
+            .recv(&mut &mut receive_buffer[..], 0)
+            .context("Netlink receive failure")?;
 
         loop {
             let bytes = &receive_buffer[offset..];
-            let rx_packet: NetlinkMessage<T> = NetlinkMessage::deserialize(bytes).unwrap();
+            let rx_packet: NetlinkMessage<T> = NetlinkMessage::deserialize(bytes)
+                .context("Netlink message format not recognized")?;
             match rx_packet.payload {
                 NetlinkPayload::Done(_) => return Ok(()),
                 NetlinkPayload::InnerMessage(inner) => recv(inner),
