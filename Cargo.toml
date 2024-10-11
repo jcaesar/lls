@@ -9,6 +9,7 @@ license = "MIT"
 categories = ["command-line-utilities"]
 keywords = ["listening", "socket", "linux", "cli"]
 readme = "README.md"
+rust-version = "1.74"
 
 [dependencies]
 anstyle = "1.0.8"
