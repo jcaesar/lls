@@ -69,15 +69,17 @@ fn main() -> Result<()> {
     // output wireguards
     let mut interface_sockets = HashMap::<_, Vec<_>>::new();
     socks.retain(|_sockid, sockinfo| {
-        if let Some(if_id) = iface_info.interface_ports.get(&sockinfo.port) {
-            interface_sockets
-                .entry(if_id)
-                .or_default()
-                .push(sockinfo.to_owned());
-            false
-        } else {
-            true
+        let mut retain = true;
+        for &(if_id, port) in &iface_info.interface_ports {
+            if port == sockinfo.port {
+                retain = false;
+                interface_sockets
+                    .entry(if_id)
+                    .or_default()
+                    .push(sockinfo.to_owned());
+            }
         }
+        retain
     });
     for (if_id, socks) in &interface_sockets {
         if filters.accept_wg() {
@@ -126,7 +128,7 @@ fn main() -> Result<()> {
 #[derive(Default)]
 struct IfaceInfo {
     id2name: HashMap<u32, String>,
-    interface_ports: HashMap<u16, u32>,
+    interface_ports: Vec<(u32, u16)>,
     local_routes: netlink::route::Rtbl,
 }
 
@@ -143,7 +145,6 @@ fn interfaces_routes() -> IfaceInfo {
     let wireguard_ports = wireguards(&wireguard_ids).unwrap_or_default();
     IfaceInfo {
         id2name,
-        // TODO: be angry on collisions
         interface_ports: wireguard_ports
             .into_iter()
             .chain(vxlan_ports.into_iter())

@@ -15,7 +15,7 @@ use std::{cmp::Reverse, collections::HashMap, net::IpAddr};
 pub struct Interfaces {
     pub id2name: HashMap<u32, String>,
     pub wireguard_ids: Vec<u32>,
-    pub vxlan_ports: HashMap<u16, u32>,
+    pub vxlan_ports: Vec<(u32, u16)>,
 }
 
 pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
@@ -33,7 +33,7 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
 
     let mut map = HashMap::new();
     let mut wg_ids = Vec::new();
-    let mut vxlan_ports = HashMap::new();
+    let mut vxlan_ports = Vec::new();
     drive_req(packet, socket, |inner| {
         if let RouteNetlinkMessage::NewLink(nl) = inner {
             for nla in nl.attributes {
@@ -50,7 +50,7 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
                                 LinkInfo::Data(InfoData::Vxlan(data)) => {
                                     for datum in data {
                                         if let InfoVxlan::Port(port) = datum {
-                                            vxlan_ports.insert(port, nl.header.index);
+                                            vxlan_ports.push((nl.header.index, port));
                                         }
                                     }
                                 }

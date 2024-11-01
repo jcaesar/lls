@@ -7,9 +7,8 @@ use netlink_packet_generic::{
 };
 use netlink_packet_wireguard::{nlas::WgDeviceAttrs, Wireguard, WireguardCmd};
 use netlink_sys::{protocols::NETLINK_GENERIC, Socket, SocketAddr};
-use std::collections::HashMap;
 
-pub fn wireguards(interface_ids: &[u32]) -> Result<HashMap<u16, u32>> {
+pub fn wireguards(interface_ids: &[u32]) -> Result<Vec<(u32, u16)>> {
     if interface_ids.is_empty() {
         return Ok(Default::default());
     }
@@ -43,7 +42,7 @@ pub fn wireguards(interface_ids: &[u32]) -> Result<HashMap<u16, u32>> {
     .context("Get wireguard family")?;
     let family_id = family_id.context("Netlink wireguard family not found")?;
 
-    let mut ret = HashMap::new();
+    let mut ret = Vec::new();
     for &if_id in interface_ids {
         let mut payload = GenlMessage::from_payload(Wireguard {
             cmd: WireguardCmd::GetDevice,
@@ -55,15 +54,13 @@ pub fn wireguards(interface_ids: &[u32]) -> Result<HashMap<u16, u32>> {
         packet.header.sequence_number = 2;
 
         drive_req(packet, &socket, |inner| {
-        for nla in inner.payload.nlas {
-            if let WgDeviceAttrs::ListenPort(port) = nla {
-                if let Some(other_id) = ret.insert(port, if_id) {
-                    eprintln!("WARNING: Wireguard interfaces {if_id} and {other_id} seem to be listening on the same port {port}. Output may be inaccurate");
-                    }
+            for nla in inner.payload.nlas {
+                if let WgDeviceAttrs::ListenPort(port) = nla {
+                    ret.push((if_id, port))
                 }
             }
-    })
-    .context("Get wireguard ")?;
+        })
+        .context("Get wireguard ")?;
     }
 
     Ok(ret)
