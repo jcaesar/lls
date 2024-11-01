@@ -4,11 +4,9 @@ use netlink_packet_core::{
     NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
 };
 use netlink_packet_route::{
-    constants::*,
-    link::nlas::Nla as LinkNla,
-    nlas::link::{Info, InfoKind},
-    route::nlas::Nla as RouteNla,
-    LinkMessage, RouteMessage, RtnlMessage,
+    link::{InfoKind, LinkAttribute, LinkExtentMask, LinkInfo, LinkMessage},
+    route::{RouteAddress, RouteAttribute, RouteMessage, RouteType},
+    RouteNetlinkMessage,
 };
 use netlink_sys::{protocols::NETLINK_ROUTE, Socket, SocketAddr};
 use std::{cmp::Reverse, collections::HashMap, net::IpAddr};
@@ -20,9 +18,14 @@ pub struct Interfaces {
 }
 
 pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
+    let mut get_link = LinkMessage::default();
+    get_link
+        .attributes
+        .push(LinkAttribute::ExtMask(vec![LinkExtentMask::SkipStats]));
+    // get_link.header.interface_family = AddressFamily::Bridge;
     let mut packet = NetlinkMessage::new(
         NetlinkHeader::default(),
-        NetlinkPayload::from(RtnlMessage::GetLink(LinkMessage::default())),
+        NetlinkPayload::from(RouteNetlinkMessage::GetLink(get_link)),
     );
     packet.header.flags = NLM_F_DUMP | NLM_F_REQUEST;
     packet.header.sequence_number = 1;
@@ -30,15 +33,15 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
     let mut map = HashMap::new();
     let mut wg_ids = Vec::new();
     drive_req(packet, socket, |inner| {
-        if let RtnlMessage::NewLink(nl) = inner {
-            for nla in nl.nlas {
+        if let RouteNetlinkMessage::NewLink(nl) = inner {
+            for nla in nl.attributes {
                 match nla {
-                    LinkNla::IfName(name) => {
+                    LinkAttribute::IfName(name) => {
                         map.insert(nl.header.index, name);
                     }
-                    LinkNla::Info(infos) => {
+                    LinkAttribute::LinkInfo(infos) => {
                         for info in infos {
-                            if info == Info::Kind(InfoKind::Wireguard) {
+                            if info == LinkInfo::Kind(InfoKind::Wireguard) {
                                 wg_ids.push(nl.header.index);
                             }
                         }
@@ -145,45 +148,37 @@ impl Rtbl {
 }
 
 pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
+    const RT_TABLE_LOCAL: u8 = 0;
     let mut route_message = RouteMessage::default();
     route_message.header.table = RT_TABLE_LOCAL; // This is respected
-    route_message.header.kind = RTN_LOCAL; // This is not respected
+    route_message.header.kind = RouteType::Local; // This is not respected
     let packet = NetlinkMessage::new(
         nl_hdr_flags(NLM_F_REQUEST | NLM_F_DUMP),
-        NetlinkPayload::from(RtnlMessage::GetRoute(route_message)),
+        NetlinkPayload::from(RouteNetlinkMessage::GetRoute(route_message)),
     );
 
     let mut ret = Vec::new();
     drive_req(packet, socket, |inner| {
-        if let RtnlMessage::NewRoute(route) = inner {
-            if route.header.table == RT_TABLE_LOCAL && route.header.kind == RTN_LOCAL {
-                let iface = route.nlas.iter().find_map(|nla| match nla {
-                    RouteNla::Oif(ifc) => Some(ifc),
+        if let RouteNetlinkMessage::NewRoute(route) = inner {
+            if route.header.table == RT_TABLE_LOCAL && route.header.kind == RouteType::Local {
+                let iface = route.attributes.iter().find_map(|nla| match nla {
+                    RouteAttribute::Oif(ifc) => Some(ifc),
                     _ => None,
                 });
-                let dst = route.nlas.iter().find_map(|nla| match nla {
-                    RouteNla::Destination(bits) => Some(bits),
+                let dst = route.attributes.iter().find_map(|nla| match nla {
+                    RouteAttribute::Destination(bits) => Some(bits),
                     _ => None,
                 });
                 if let (Some(&iface), Some(dst)) = (iface, dst) {
                     // TODO: more anyhow, less expect/unreachable
-                    ret.push(Route {
-                        iface,
-                        pfx: Prefix {
-                            bits: route.header.destination_prefix_length,
-                            dst: match route.header.address_family as u16 {
-                                AF_INET => <[u8; 4]>::try_from(&dst[..])
-                                    .expect("4 byte ipv4 addr?")
-                                    .into(),
-                                AF_INET6 => <[u8; 16]>::try_from(&dst[..])
-                                    .expect("16 byte ipv6 addr?")
-                                    .into(),
-                                _ => unreachable!(
-                                    "Unknown address family. Have nanites caused IPv8?"
-                                ),
-                            },
-                        },
-                    });
+                    let dst = match *dst {
+                        RouteAddress::Inet(a) => IpAddr::from(a),
+                        RouteAddress::Inet6(a) => IpAddr::from(a),
+                        _ => unreachable!("Unknown address family. Have nanites caused IPv8?"),
+                    };
+                    let bits = route.header.destination_prefix_length;
+                    let pfx = Prefix { bits, dst };
+                    ret.push(Route { iface, pfx });
                 }
             }
         }
