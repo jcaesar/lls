@@ -4,7 +4,7 @@ use netlink_packet_core::{
     NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
 };
 use netlink_packet_route::{
-    link::{InfoKind, LinkAttribute, LinkExtentMask, LinkInfo, LinkMessage},
+    link::{InfoData, InfoKind, InfoVxlan, LinkAttribute, LinkExtentMask, LinkInfo, LinkMessage},
     route::{RouteAddress, RouteAttribute, RouteMessage, RouteType},
     RouteNetlinkMessage,
 };
@@ -15,6 +15,7 @@ use std::{cmp::Reverse, collections::HashMap, net::IpAddr};
 pub struct Interfaces {
     pub id2name: HashMap<u32, String>,
     pub wireguard_ids: Vec<u32>,
+    pub vxlan_ports: HashMap<u16, u32>,
 }
 
 pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
@@ -32,6 +33,7 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
 
     let mut map = HashMap::new();
     let mut wg_ids = Vec::new();
+    let mut vxlan_ports = HashMap::new();
     drive_req(packet, socket, |inner| {
         if let RouteNetlinkMessage::NewLink(nl) = inner {
             for nla in nl.attributes {
@@ -41,8 +43,18 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
                     }
                     LinkAttribute::LinkInfo(infos) => {
                         for info in infos {
-                            if info == LinkInfo::Kind(InfoKind::Wireguard) {
-                                wg_ids.push(nl.header.index);
+                            match info {
+                                LinkInfo::Kind(InfoKind::Wireguard) => {
+                                    wg_ids.push(nl.header.index);
+                                }
+                                LinkInfo::Data(InfoData::Vxlan(data)) => {
+                                    for datum in data {
+                                        if let InfoVxlan::Port(port) = datum {
+                                            vxlan_ports.insert(port, nl.header.index);
+                                        }
+                                    }
+                                }
+                                _ => (),
                             }
                         }
                     }
@@ -56,6 +68,7 @@ pub fn interface_names(socket: &Socket) -> Result<Interfaces> {
     Ok(Interfaces {
         id2name: map,
         wireguard_ids: wg_ids,
+        vxlan_ports,
     })
 }
 
@@ -170,7 +183,6 @@ pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
                     _ => None,
                 });
                 if let (Some(&iface), Some(dst)) = (iface, dst) {
-                    // TODO: more anyhow, less expect/unreachable
                     let dst = match *dst {
                         RouteAddress::Inet(a) => IpAddr::from(a),
                         RouteAddress::Inet6(a) => IpAddr::from(a),

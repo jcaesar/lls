@@ -67,10 +67,10 @@ fn main() -> Result<()> {
     }
 
     // output wireguards
-    let mut wireguard_sockets = HashMap::<_, Vec<_>>::new();
+    let mut interface_sockets = HashMap::<_, Vec<_>>::new();
     socks.retain(|_sockid, sockinfo| {
-        if let Some(if_id) = iface_info.wireguard_ports.get(&sockinfo.port) {
-            wireguard_sockets
+        if let Some(if_id) = iface_info.interface_ports.get(&sockinfo.port) {
+            interface_sockets
                 .entry(if_id)
                 .or_default()
                 .push(sockinfo.to_owned());
@@ -79,11 +79,11 @@ fn main() -> Result<()> {
             true
         }
     });
-    for (if_id, socks) in &wireguard_sockets {
+    for (if_id, socks) in &interface_sockets {
         if filters.accept_wg() {
             let name = match iface_info.id2name.get(if_id) {
-                Some(ifname) => format!("[wireguard {ifname}]"),
-                None => format!("wireguard, index {if_id}"),
+                Some(ifname) => format!("[network interface {ifname}]"),
+                None => format!("[network interface #{if_id}]"),
             };
             output.node(name, sockets_tree(socks, &filters));
         }
@@ -126,7 +126,7 @@ fn main() -> Result<()> {
 #[derive(Default)]
 struct IfaceInfo {
     id2name: HashMap<u32, String>,
-    wireguard_ports: HashMap<u16, u32>,
+    interface_ports: HashMap<u16, u32>,
     local_routes: netlink::route::Rtbl,
 }
 
@@ -137,12 +137,17 @@ fn interfaces_routes() -> IfaceInfo {
     let netlink::route::Interfaces {
         id2name,
         wireguard_ids,
+        vxlan_ports,
     } = netlink::route::interface_names(route_socket).unwrap_or_default();
     let local_routes = netlink::route::local_routes(route_socket).unwrap_or_default();
     let wireguard_ports = wireguards(&wireguard_ids).unwrap_or_default();
     IfaceInfo {
         id2name,
-        wireguard_ports,
+        // TODO: be angry on collisions
+        interface_ports: wireguard_ports
+            .into_iter()
+            .chain(vxlan_ports.into_iter())
+            .collect(),
         local_routes,
     }
 }
