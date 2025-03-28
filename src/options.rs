@@ -56,7 +56,6 @@ impl Filters {
                 let check_option = |x: &Option<String>| x.as_deref().is_some_and(check);
                 check_option(&pd.name)
                     || check_option(&pd.info.name)
-                    || check_option(&pd.info.comm)
                     || pd
                         .info
                         .exe

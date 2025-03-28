@@ -23,7 +23,6 @@ pub struct ProcDesc<'a> {
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ProcNamePre {
     pub name: Option<String>,
-    pub comm: Option<String>,
     pub exe: Option<PathBuf>,
     pub cmdline: Option<Vec<String>>,
 }
@@ -63,24 +62,15 @@ impl<'a> ProcDesc<'a> {
 }
 
 fn ps_name(p: &Process) -> (Option<String>, ProcNamePre) {
-    let comm = p.stat().ok().map(|s| remove_paren(s.comm));
     let exe = p.exe().ok();
     let cmdline = p.cmdline().ok();
-    let name = comm
-        .clone()
-        .or_else(|| {
-            // I considered checking whether to check if the exe file_name is on $PATH
-            // and print the whole path if not. Nah.
-            exe.as_ref()
-                .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
-        })
+    // I considered checking whether to check if the exe file_name is on $PATH
+    // and print the whole path if not. Nah.
+    let name = exe
+        .as_ref()
+        .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
         .or_else(|| cmdline.as_ref().and_then(|v| v.get(0).cloned()));
-    let proc_name_pre = ProcNamePre {
-        comm,
-        exe,
-        cmdline,
-        name,
-    };
+    let proc_name_pre = ProcNamePre { exe, cmdline, name };
     let name = if let py @ Some(_) = py_ps_name(&proc_name_pre) {
         py
     } else if let lua @ Some(_) = lua_ps_name(&proc_name_pre) {
@@ -283,7 +273,7 @@ fn interpreter_ps_name(
 ) -> Option<String> {
     let name = proc_name_pre.name.as_ref()?;
     let cmdline = proc_name_pre.cmdline.as_ref()?;
-    if !looks_ish(interpreter, proc_name_pre.comm.as_ref()?)
+    if !looks_ish(interpreter, proc_name_pre.name.as_ref()?)
         || !looks_ish(
             interpreter,
             &proc_name_pre.exe.as_ref()?.file_name()?.to_string_lossy(),
@@ -329,13 +319,6 @@ fn looks_ish(name: &str, comm: &str) -> bool {
     }
 }
 
-fn remove_paren(x: String) -> String {
-    x.strip_prefix('(')
-        .and_then(|x| x.strip_suffix(')'))
-        .map(|x| x.into())
-        .unwrap_or(x)
-}
-
 impl PartialOrd for ProcDesc<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
@@ -378,7 +361,6 @@ mod test {
         .collect();
         let name = super::py_ps_name(&ProcNamePre {
             name: Some("python".into()),
-            comm: Some("python".into()),
             exe: Some("/usr/bin/python3".into()),
             cmdline: Some(cmdline),
         });
@@ -394,7 +376,6 @@ mod test {
 
         let name = super::py_ps_name(&ProcNamePre {
             name: Some("python".into()),
-            comm: Some("python".into()),
             exe: Some("/usr/bin/python3.10".into()),
             cmdline: Some(cmdline),
         });
@@ -435,7 +416,6 @@ mod test {
         .collect();
         let name = super::java_ps_name(&ProcNamePre {
             name: Some("java".to_owned()),
-            comm: Some("java".to_owned()),
             exe: Some("/opt/java/openjdk/bin/java".into()),
             cmdline: Some(cmdline),
         });
@@ -454,7 +434,6 @@ mod test {
 
         let name = super::node_ps_name(&ProcNamePre {
             name: Some("node".into()),
-            comm: Some("node".into()),
             exe: Some("/usr/bin/node".into()),
             cmdline: Some(cmdline),
         });
