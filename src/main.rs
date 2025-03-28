@@ -18,7 +18,7 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
     ops::Deref,
 };
-use uzers::UsersCache;
+use uzers::{Users as _, UsersCache};
 
 pub type Ino = u64;
 
@@ -103,7 +103,19 @@ fn main() -> Result<()> {
         true => {
             for (uid, socks) in socks {
                 if filters.accept_user(uid) {
-                    output.node(format!("??? (user {uid})",), sockets_tree(socks, &filters));
+                    // Non-root users often have nothing else to work with, so
+                    // print user name even when we don't know the correct same namespace
+                    let user = (uzers::get_effective_uid() != 0)
+                        .then(|| users_cache.get_user_by_uid(uid))
+                        .flatten();
+                    let proc_desc = match user {
+                        Some(user) => {
+                            let name = user.name().to_string_lossy();
+                            format!("??? (user {uid}/{name}?)")
+                        }
+                        None => format!("??? (user {uid})"),
+                    };
+                    output.node(proc_desc, sockets_tree(socks, &filters));
                 }
             }
         }
