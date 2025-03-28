@@ -64,12 +64,18 @@ impl<'a> ProcDesc<'a> {
 fn ps_name(p: &Process) -> (Option<String>, ProcNamePre) {
     let exe = p.exe().ok();
     let cmdline = p.cmdline().ok();
+    let argv0 = cmdline.as_ref().and_then(|v| v.get(0));
     // I considered checking whether to check if the exe file_name is on $PATH
     // and print the whole path if not. Nah.
     let name = exe
         .as_ref()
-        .and_then(|p| p.file_name().map(|p| p.to_string_lossy().into_owned()))
-        .or_else(|| cmdline.as_ref().and_then(|v| v.get(0).cloned()));
+        .and_then(|p| {
+            p.file_name().map(|p| {
+                let name = p.to_string_lossy();
+                un_nix_wrap(name.as_ref(), argv0).unwrap_or_else(|| name.into_owned())
+            })
+        })
+        .or_else(|| argv0.cloned());
     let proc_name_pre = ProcNamePre { exe, cmdline, name };
     let name = if let py @ Some(_) = py_ps_name(&proc_name_pre) {
         py
@@ -83,6 +89,15 @@ fn ps_name(p: &Process) -> (Option<String>, ProcNamePre) {
         proc_name_pre.name.clone()
     };
     (name, proc_name_pre)
+}
+
+// I generally prefer the exe file name,
+// but nixpkgs/nixos has those named .foo-wrapped in many cases.
+// I want foo then.
+fn un_nix_wrap(name: &str, argv0: Option<&String>) -> Option<String> {
+    let argv0 = argv0?;
+    let argv0 = &argv0[argv0.rfind('/').map_or(0, |p| p + 1)..];
+    (argv0 == name.strip_prefix(".")?.strip_suffix("-wrapped")?).then(|| argv0.into())
 }
 
 fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
