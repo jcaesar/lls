@@ -104,7 +104,7 @@ fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
     let special = &|arg: &str, next: Option<&str>| {
         if arg == "-jar" {
             ControlFlow::Break(
-                next.filter(|jar| jar.ends_with(".jar"))
+                next.filter(|jar| jar.ends_with(".jar") || jar.ends_with(".war"))
                     .map(|s| s.to_owned()),
             )
         } else {
@@ -453,5 +453,26 @@ mod test {
             cmdline: Some(cmdline),
         });
         assert_eq!(name.as_deref(), Some("node serve.js"));
+    }
+
+    #[test]
+    fn airsonic() {
+        let exe = "/nix/store/foobar-openjdk-8u432-b06-jre/lib/openjdk/jre/bin/java";
+        let cmdline = [
+            exe,
+            "-Xmx2500m",
+            "-Dairsonic.home=/var/lib/airsonic",
+            "-Dserver.address=127.0.0.1",
+            // …
+            "-verbose:gc",
+            "-jar",
+            "/nix/store/bababar-airsonic-10.6.2/webapps/airsonic.war",
+        ];
+        let name = super::java_ps_name(&ProcNamePre {
+            name: Some("java".into()),
+            exe: Some(exe.into()),
+            cmdline: Some(cmdline.into_iter().map(ToOwned::to_owned).collect()),
+        });
+        assert!(name.map(|s| s.strip_suffix(".war").is_some()) == Some(true));
     }
 }
