@@ -105,7 +105,7 @@ fn java_ps_name(proc_name_pre: &ProcNamePre) -> Option<String> {
         if arg == "-jar" {
             ControlFlow::Break(
                 next.filter(|jar| jar.ends_with(".jar") || jar.ends_with(".war"))
-                    .map(|s| s.to_owned()),
+                    .map(shorten_nix_paths),
             )
         } else {
             ControlFlow::Continue(())
@@ -357,6 +357,19 @@ pub fn get_user_ns(p: &Process) -> Result<u64> {
 
 pub fn ourself() -> Result<Process> {
     Ok(procfs::process::Process::myself()?)
+}
+
+// more nix special casing:
+// jars seem to be likely to have un-informative names,
+// so I'd like to print whatever is available,
+// except for full paths on nix, those are long.
+pub fn shorten_nix_paths(path: &str) -> String {
+    let pfx = "/nix/store/";
+    let dash = path.find('-');
+    match (path.starts_with(pfx), dash) {
+        (false, _) | (_, None) => path.into(),
+        (true, Some(dash)) => format!("{}…{}", &path[..pfx.len() + 4], &path[dash..]),
+    }
 }
 
 #[cfg(test)]
