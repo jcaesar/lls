@@ -1,5 +1,6 @@
 use super::{drive_req, nl_hdr_flags};
 use anyhow::{Context, Result};
+use itertools::Itertools as _;
 use netlink_packet_core::{
     NetlinkHeader, NetlinkMessage, NetlinkPayload, NLM_F_DUMP, NLM_F_REQUEST,
 };
@@ -146,12 +147,14 @@ impl Rtbl {
         Self(routes)
     }
     pub fn route(&self, addr: IpAddr) -> Option<u32> {
-        for route in &self.0 {
-            if route.pfx.matches(addr) {
-                return Some(route.iface);
-            }
-        }
-        None
+        Some(
+            self.0
+                .iter()
+                .filter(|route| route.pfx.matches(addr))
+                .exactly_one()
+                .ok()?
+                .iface,
+        )
     }
     pub fn for_iface(&self, iface: u32) -> impl Iterator<Item = Prefix> + '_ {
         self.0
