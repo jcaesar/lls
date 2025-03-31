@@ -44,7 +44,7 @@ fn main() -> Result<()> {
         },
     };
     let mut output = termtree::Tree::new();
-    let self_user_ns = procs::get_user_ns(&procs::ourself()?).ok();
+    let self_user_ns = procs::get_user_mount_nss(&procs::ourself()?).ok();
 
     // output known processes/sockets
     let mut lps = all_processes()?

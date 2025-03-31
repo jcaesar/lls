@@ -2,10 +2,7 @@ use super::netlink::sock::SockInfo;
 use crate::Ino;
 use anyhow::{Context, Result};
 use procfs::process::Process;
-use std::{
-    collections::HashMap, ffi::OsString, ops::ControlFlow, os::unix::prelude::OsStringExt,
-    path::PathBuf,
-};
+use std::{collections::HashMap, ffi::OsStr, ops::ControlFlow, path::PathBuf};
 use uzers::{Users, UsersCache};
 
 pub type Pid = i32;
@@ -32,13 +29,13 @@ impl<'a> ProcDesc<'a> {
         p: Result<Process, procfs::ProcError>,
         socks: &mut HashMap<Ino, SockInfo<'a>>,
         user_names: &UsersCache,
-        self_user_ns: Option<u64>,
+        self_user_ns: Option<(u64, u64)>,
     ) -> Result<ProcDesc<'a>> {
         let p = p?;
         let (name, info) = ps_name(&p);
         let user = user_names
             .get_user_by_uid(p.uid()?)
-            .filter(|_| get_user_ns(&p).ok() == self_user_ns)
+            .filter(|_| get_user_mount_nss(&p).ok() == self_user_ns)
             .map_or_else(
                 || format!("{}", p.uid().unwrap()),
                 |u| u.name().to_string_lossy().into_owned(),
@@ -346,13 +343,15 @@ impl Ord for ProcDesc<'_> {
     }
 }
 
-pub fn get_user_ns(p: &Process) -> Result<u64> {
-    Ok(p.namespaces()
-        .context("Namespaces inaccessible")?
-        .0
-        .get(&OsString::from_vec(b"user".to_vec()))
-        .context("No user ns")?
-        .identifier)
+pub fn get_user_mount_nss(p: &Process) -> Result<(u64, u64)> {
+    let ns_map = &p.namespaces().context("Namespaces inaccessible")?.0;
+    let getns = |id: &str| -> Result<u64> {
+        Ok(ns_map
+            .get(OsStr::new(id))
+            .with_context(|| format!("No {id} ns"))?
+            .identifier)
+    };
+    Ok((getns("user")?, getns("mnt")?))
 }
 
 pub fn ourself() -> Result<Process> {
