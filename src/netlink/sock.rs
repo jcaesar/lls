@@ -68,7 +68,7 @@ pub fn all_sockets<'i>(
     Ok(ret)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Family {
     V4,
     V6,

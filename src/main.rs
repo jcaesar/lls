@@ -12,7 +12,7 @@ use netlink::{
 };
 use procfs::process::all_processes;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, BTreeSet, HashMap},
     env::var_os,
     io::{stdout, BufWriter, Write},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -184,25 +184,16 @@ fn sockets_tree<'a>(
         {
             sout.leaf("0.0.0.0 + ::".into());
         } else {
-            let fields = |sock: &SockInfo<'a>| (sock.family, sock.iface, sock.addr);
-            let mut counts = socks
+            let socks = socks
                 .iter()
                 .filter(|sock| filter.accept_addr(sock.addr))
-                .counts_by(|sock| fields(sock));
+                .collect::<BTreeSet<_>>();
             for sock in socks {
-                let count = counts.remove(&fields(&*sock));
-                if let Some(count) = count {
-                    let disp = match (sock.family, sock.iface) {
-                        (Family::Both, _) => "*".into(),
-                        (_, Some(ifname)) => format!("{} ({ifname})", sock.addr),
-                        _ => format!("{}", sock.addr),
-                    };
-                    let duplicity = match count {
-                        1 => "".into(),
-                        _ => format!(" (×{count})"),
-                    };
-                    sout.leaf(format!("{disp}{duplicity}"));
-                }
+                match (sock.family, sock.iface) {
+                    (Family::Both, _) => sout.leaf("*".into()),
+                    (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", sock.addr)),
+                    _ => sout.leaf(format!("{}", sock.addr)),
+                };
             }
         }
         if filter.accept_port(port) && filter.accept_proto(proto) {
