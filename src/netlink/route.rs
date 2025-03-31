@@ -130,6 +130,7 @@ impl std::str::FromStr for Prefix {
     }
 }
 
+#[derive(Debug)]
 struct Route {
     pfx: Prefix,
     iface: u32,
@@ -173,7 +174,7 @@ pub fn local_routes(socket: &Socket) -> Result<Rtbl> {
     let mut ret = Vec::new();
     drive_req(packet, socket, |inner| {
         if let RouteNetlinkMessage::NewRoute(route) = inner {
-            if route.header.table == RT_TABLE_LOCAL && route.header.kind == RouteType::Local {
+            if route.header.kind == RouteType::Local {
                 let iface = route.attributes.iter().find_map(|nla| match nla {
                     RouteAttribute::Oif(ifc) => Some(ifc),
                     _ => None,
