@@ -12,7 +12,7 @@ OPTIONS:
     :, -p, --port <port>  Only show sockets with matching listening port.
                           Can be a range. Examples: :8080, --port=1336-1338
 
-    -a, --addr <prefix>   Only show sockets reachable from the specified address or range.
+    -a, --addr <prefix>   Only show sockets matching the specified address or range.
                           Examples: 192.168.0.1, -a 127.0.0.0/8
                           Any plain argument that parses as an IP prefix is accepted,
                           i.e. -a/--addr can be omitted.
