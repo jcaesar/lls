@@ -187,12 +187,13 @@ fn sockets_tree<'a>(
             let socks = socks
                 .iter()
                 .filter(|sock| filter.accept_addr(sock.addr))
+                .map(|sock| (sock.family, sock.addr, sock.iface))
                 .collect::<BTreeSet<_>>();
-            for sock in socks {
-                match (sock.family, sock.iface) {
+            for (family, addr, iface) in socks {
+                match (family, iface) {
                     (Family::Both, _) => sout.leaf("*".into()),
-                    (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", sock.addr)),
-                    _ => sout.leaf(format!("{}", sock.addr)),
+                    (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", addr)),
+                    _ => sout.leaf(format!("{}", addr)),
                 };
             }
         }
