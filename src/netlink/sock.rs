@@ -152,6 +152,13 @@ impl std::str::FromStr for Protocol {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Ord, PartialOrd, Copy)]
+pub enum IfaceName<'a> {
+    None,
+    Associated(&'a str),
+    LocalRoute(&'a str),
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SockInfo<'a> {
     pub family: Family,
@@ -160,7 +167,7 @@ pub struct SockInfo<'a> {
     pub addr: IpAddr,
     pub uid: u32,
     pub ino: Ino,
-    pub iface: Option<&'a str>,
+    pub iface: IfaceName<'a>,
 }
 impl<'a> SockInfo<'a> {
     fn new(
@@ -180,14 +187,16 @@ impl<'a> SockInfo<'a> {
             family
         };
         let addr = ir.header.socket_id.source_address;
-        let iface = interfaces
-            .get(&ir.header.socket_id.interface_id)
-            .or_else(|| {
-                local_routes
-                    .route(addr)
-                    .and_then(|iface| interfaces.get(&iface))
-            })
-            .map(|x| &**x);
+        let iface = match ir.header.socket_id.interface_id {
+            1.. => interfaces
+                .get(&ir.header.socket_id.interface_id)
+                .map(|x| IfaceName::Associated(&**x)),
+            0 => local_routes
+                .route(addr)
+                .and_then(|iface| interfaces.get(&iface))
+                .map(|x| IfaceName::LocalRoute(&**x)),
+        };
+        // .map(|x| &**x);
         Self {
             family,
             protocol,
@@ -195,7 +204,7 @@ impl<'a> SockInfo<'a> {
             addr,
             uid: ir.header.uid,
             ino: ir.header.inode.into(),
-            iface,
+            iface: iface.unwrap_or(IfaceName::None),
         }
     }
 }

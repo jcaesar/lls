@@ -1,7 +1,7 @@
 use super::Ino;
 use crate::{
     netlink::sock::{Family, Protocol, SockInfo},
-    IfaceInfo,
+    IfaceInfo, IfaceName,
 };
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -39,7 +39,8 @@ pub fn all_sockets<'i>(
                                     iface: local_routes
                                         .route(s.local_address.ip())
                                         .and_then(|iface| interfaces.get(&iface))
-                                        .map(|s| &**s),
+                                        .map(|s| IfaceName::LocalRoute(&**s))
+                                        .unwrap_or(IfaceName::None),
                                 },
                             );
                         }

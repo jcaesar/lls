@@ -39,9 +39,9 @@ avahi-daemon (pid 655 user avahi)
  * Explaining wireguard and vxlan listening ports
 
 More specifically
- * `ss` has a nice short command, but then you need a lot of arguments. But which? `-lpunt`? (Though of course, `ss` can do things `lls` can't, like printing established connections or unix sockets.)
+ * `ss` has a nice short command, but then you need a lot of arguments. `-plut0wn` maybe? (Though of course, `ss` can do things `lls` can't, like printing established connections or unix sockets.)
  * `ss` output requires ~160 columns, while `lls` makes do with ~60.
  * `ss` output order is unfathomable.
- * For interpreters, `ss` will just display the command name, e.g. `python` or `node`.
+ * `ss` will just display the command name, e.g. `python` or `node`, but not what script is running.
    `lls` tries to parse the command line of the interpreters and display the script name where possible.
  * `ss` prints almost no information for listening ports belonging to WireGuard or VXLAN interfaces, and what it prints is more confusing than helpful.

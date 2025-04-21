@@ -7,7 +7,7 @@ mod termtree;
 use anyhow::Result;
 use itertools::Itertools;
 use netlink::{
-    sock::{Family, SockInfo},
+    sock::{Family, IfaceName, SockInfo},
     wg::wireguards,
 };
 use procfs::process::all_processes;
@@ -176,12 +176,9 @@ fn sockets_tree<'a>(
     }
     for ((port, proto), socks) in groups {
         let mut sout = termtree::Tree::new();
-        if socks.iter().map(|s| s.addr).sorted().collect::<Vec<_>>()
-            == [
-                IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-                IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-            ]
-        {
+        let v4all = IpAddr::V4(Ipv4Addr::UNSPECIFIED);
+        let v6all = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
+        if socks.iter().map(|s| s.addr).sorted().collect::<Vec<_>>() == [v4all, v6all] {
             sout.leaf("0.0.0.0 + ::".into());
         } else {
             let socks = socks
@@ -191,9 +188,13 @@ fn sockets_tree<'a>(
                 .collect::<BTreeSet<_>>();
             for (family, addr, iface) in socks {
                 match (family, iface) {
-                    (Family::Both, _) => sout.leaf("*".into()),
-                    (_, Some(ifname)) => sout.leaf(format!("{} ({ifname})", addr)),
-                    _ => sout.leaf(format!("{}", addr)),
+                    (Family::Both, IfaceName::None) if addr == v6all => sout.leaf("*".into()),
+                    (Family::Both, IfaceName::Associated(ifnam)) if addr == v6all => {
+                        sout.leaf(format!("*%{ifnam}"))
+                    }
+                    (_, IfaceName::Associated(ifnam)) => sout.leaf(format!("{addr}%{ifnam}")),
+                    (_, IfaceName::LocalRoute(ifnam)) => sout.leaf(format!("{addr} ({ifnam})")),
+                    (_, IfaceName::None) => sout.leaf(format!("{}", addr)),
                 };
             }
         }
