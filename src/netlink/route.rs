@@ -151,9 +151,10 @@ impl Rtbl {
             self.0
                 .iter()
                 .filter(|route| route.pfx.matches(addr))
+                .map(|route| route.iface)
+                .unique()
                 .exactly_one()
-                .ok()?
-                .iface,
+                .ok()?,
         )
     }
     pub fn for_iface(&self, iface: u32) -> impl Iterator<Item = Prefix> + '_ {
