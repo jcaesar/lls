@@ -1,7 +1,7 @@
 [package]
 name = "lls"
 description = "list listening sockets"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 authors = ["Julius Michaelis <gitter@liftm.de>"]
 repository = "https://github.com/jcaesar/lls"
